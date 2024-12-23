@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { QuillIntegration } from './QuillIntegration'
 import type { PostFormData } from '@/types'
+import { toast } from '@/components/ui/use-toast'
 
 interface BlogEditorProps {
   initialData?: {
@@ -15,6 +16,8 @@ interface BlogEditorProps {
     category?: string
     tags?: string[]
     status?: 'draft' | 'published'
+    slug?: string
+    published_at?: string
   }
   onSave: (content: string, metadata: PostFormData) => Promise<void>
 }
@@ -31,7 +34,7 @@ export function BlogEditor({ initialData = {}, onSave }: BlogEditorProps) {
   const [error, setError] = useState<string>()
   const [isSaving, setIsSaving] = useState(false)
 
-  const handleManualSave = async (status: 'draft' | 'published') => {
+  const handleSave = async () => {
     if (!metadata.title) {
       setError('请输入文章标题')
       return
@@ -40,9 +43,23 @@ export function BlogEditor({ initialData = {}, onSave }: BlogEditorProps) {
     try {
       setIsSaving(true)
       setError(undefined)
-      await onSave(content, { ...metadata, status })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+
+      const savedPost = await onSave({
+        ...metadata,
+        content,
+        slug: initialData.slug,
+      })
+
+      toast({
+        title: '成功',
+        description: '文章已保存',
+      })
+
+      return savedPost
+    } catch (error) {
+      console.error('保存失败:', error)
+      setError(error instanceof Error ? error.message : '保存失败')
+      throw error
     } finally {
       setIsSaving(false)
     }
@@ -83,12 +100,9 @@ export function BlogEditor({ initialData = {}, onSave }: BlogEditorProps) {
         </Alert>
       )}
 
-      <div className='flex justify-end space-x-2'>
-        <Button variant='outline' onClick={() => handleManualSave('draft')} disabled={isSaving}>
-          保存草稿
-        </Button>
-        <Button onClick={() => handleManualSave('published')} disabled={isSaving}>
-          {isSaving ? '保存中...' : '发布'}
+      <div className='flex justify-end'>
+        <Button onClick={handleSave} disabled={isSaving}>
+          {isSaving ? '保存中...' : '保存'}
         </Button>
       </div>
     </div>

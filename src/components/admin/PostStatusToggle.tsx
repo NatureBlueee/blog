@@ -1,47 +1,84 @@
 'use client'
 
-import { PostStatus } from '../../types'
+import { useState } from 'react'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { toast } from '@/components/ui/use-toast'
 
 interface PostStatusToggleProps {
-  status: PostStatus
-  onStatusChangeAction: (status: PostStatus) => Promise<void>
-  disabled?: boolean
+  postId: string
+  slug: string
+  initialStatus?: 'draft' | 'published'
+  onStatusChange?: (status: 'draft' | 'published') => void
 }
 
-export default function PostStatusToggle({ 
-  status, 
-  onStatusChangeAction,
-  disabled 
+export function PostStatusToggle({
+  postId,
+  slug,
+  initialStatus = 'draft',
+  onStatusChange,
 }: PostStatusToggleProps) {
+  const [status, setStatus] = useState<'draft' | 'published'>(initialStatus)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleStatusChange = async (checked: boolean) => {
+    if (!slug) {
+      toast({
+        variant: 'destructive',
+        title: '错误',
+        description: '文章标识符缺失',
+      })
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      const newStatus = checked ? 'published' : 'draft'
+
+      const response = await fetch(`/api/posts/${slug}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '更新状态失败')
+      }
+
+      setStatus(newStatus)
+      onStatusChange?.(newStatus)
+
+      toast({
+        title: '状态更新成功',
+        description: `文章已${newStatus === 'published' ? '发布' : '设为草稿'}`,
+      })
+    } catch (error) {
+      console.error('更新状态失败:', error)
+      setStatus(initialStatus) // 恢复原始状态
+      toast({
+        variant: 'destructive',
+        title: '更新失败',
+        description: error instanceof Error ? error.message : '无法更新文章状态，请稍后重试',
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
-    <div className="flex items-center space-x-4">
-      <span className="text-sm font-medium">状态：</span>
-      <div className="flex rounded-lg border dark:border-gray-600 p-1">
-        <button
-          type="button"
-          onClick={() => onStatusChangeAction('draft')}
-          disabled={disabled}
-          className={`px-3 py-1 text-sm rounded ${
-            status === 'draft'
-              ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-          }`}
-        >
-          草稿
-        </button>
-        <button
-          type="button"
-          onClick={() => onStatusChangeAction('published')}
-          disabled={disabled}
-          className={`px-3 py-1 text-sm rounded ${
-            status === 'published'
-              ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-          }`}
-        >
-          已发布
-        </button>
-      </div>
+    <div className='flex items-center space-x-2'>
+      <Switch
+        id={`post-status-${postId}`}
+        checked={status === 'published'}
+        onCheckedChange={handleStatusChange}
+        disabled={isLoading}
+        aria-label='切换文章状态'
+      />
+      <Label htmlFor={`post-status-${postId}`}>{status === 'published' ? '已发布' : '草稿'}</Label>
     </div>
   )
-} 
+}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { postService } from '@/lib/services/posts'
+import { getAuthUser } from '@/lib/auth'
 
 export async function GET(request: NextRequest, { params }: { params: { slug: string } }) {
   try {
@@ -24,43 +25,27 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
     }
 
     const { content, metadata, type = 'auto', description } = await request.json()
-
-    // 获取文章信息
-    const { data: post } = await supabase
-      .from('posts')
-      .select('id')
-      .eq('slug', params.slug)
-      .single()
+    const post = await postService.getPostBySlug(params.slug)
 
     if (!post) {
       return NextResponse.json({ error: '文章不存在' }, { status: 404 })
     }
 
-    // 创建新版本
-    const { data: version, error } = await supabase
-      .from('post_versions')
-      .insert({
-        post_id: post.id,
-        content,
-        metadata,
-        version_type: type,
-        description,
-        created_by: user.id,
-      })
-      .select()
-      .single()
-
-    if (error) throw error
-
-    // 如果是自动保存，清理旧的自动保存版本
-    if (type === 'auto') {
-      await cleanupAutoSaveVersions(post.id)
-    }
+    const version = await postService.createVersion({
+      post_id: post.id,
+      content,
+      metadata,
+      version_type: type,
+      description,
+    })
 
     return NextResponse.json(version)
   } catch (error) {
     console.error('创建版本失败:', error)
-    return NextResponse.json({ error: '创建版本失败' }, { status: 500 })
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : '创建版本失败' },
+      { status: 500 }
+    )
   }
 }
 

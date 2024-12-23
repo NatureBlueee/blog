@@ -1,12 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { postService } from '@/lib/services/posts'
+import { NextResponse } from 'next/server'
+import { PostService } from '@/lib/services/posts'
+import { DatabaseError } from '@/lib/errors'
 
-export async function GET(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function GET(request: Request, { params }: { params: { slug: string } }) {
   try {
+    const postService = new PostService()
     const post = await postService.getPostBySlug(params.slug)
+
     if (!post) {
       return NextResponse.json({ error: '文章不存在' }, { status: 404 })
     }
+
     return NextResponse.json(post)
   } catch (error) {
     console.error('获取文章失败:', error)
@@ -17,15 +21,13 @@ export async function GET(request: NextRequest, { params }: { params: { slug: st
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function PUT(request: Request, { params }: { params: { slug: string } }) {
   try {
-    const data = await request.json()
-    const post = await postService.updatePost(params.slug, {
-      ...data,
-      status: data.isPublishing ? 'published' : data.status,
-      published_at: data.isPublishing ? new Date().toISOString() : data.published_at,
-    })
-    return NextResponse.json(post)
+    const input = await request.json()
+    const postService = new PostService()
+
+    const updatedPost = await postService.updatePost(params.slug, input)
+    return NextResponse.json(updatedPost)
   } catch (error) {
     console.error('更新文章失败:', error)
     return NextResponse.json(
@@ -35,29 +37,16 @@ export async function PUT(request: NextRequest, { params }: { params: { slug: st
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function DELETE(request: Request, { params }: { params: { slug: string } }) {
   try {
+    const postService = new PostService()
     await postService.deletePost(params.slug)
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ message: '删除成功' })
   } catch (error) {
-    return NextResponse.json({ error: '删除文章失败' }, { status: 500 })
-  }
-}
-
-export async function POST(request: Request, { params }: { params: { slug: string } }) {
-  try {
-    const data = await request.json()
-    const { _method, ...postData } = data
-
-    // 如果是模拟的 PATCH 请求
-    if (_method === 'PATCH') {
-      // 执行更新操作
-      const updatedPost = await updatePostInDatabase(params.slug, postData)
-      return NextResponse.json(updatedPost)
-    }
-
-    return NextResponse.json({ message: '不支持的请求方法' }, { status: 405 })
-  } catch (error) {
-    return NextResponse.json({ message: '更新文章失败' }, { status: 500 })
+    console.error('删除文章失败:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : '删除文章失败' },
+      { status: 500 }
+    )
   }
 }

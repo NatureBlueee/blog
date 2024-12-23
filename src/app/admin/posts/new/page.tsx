@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { BlogEditor } from '@/components/editor/BlogEditor'
-import { createPost } from '@/lib/posts'
+import { createPost } from '@/services/posts'
 import type { PostFormData } from '@/types'
 import { useToast } from '@/components/ui/use-toast'
 
@@ -10,24 +10,16 @@ export default function NewPostPage() {
   const router = useRouter()
   const { toast } = useToast()
 
-  const handleSave = async (content: string, metadata: PostFormData) => {
+  const handleSave = async (data: PostFormData & { content: string }) => {
     try {
-      const post = await createPost({
-        content,
-        ...metadata,
-      })
+      const post = await createPost(data)
 
       toast({
         title: '保存成功',
         description: '文章已成功保存',
       })
 
-      if (metadata.status === 'published') {
-        router.push('/admin/posts')
-      } else {
-        router.push(`/admin/posts/${post.slug}/edit`)
-      }
-
+      router.push(`/admin/posts/${post.slug}/edit`)
       return post
     } catch (error) {
       toast({

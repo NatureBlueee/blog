@@ -25,18 +25,21 @@ export interface BaseResponse<T> {
 // 博客相关类型
 export interface Post {
   id: string
-  title: string
   slug: string
+  title: string
   content: string
-  excerpt: string
+  excerpt?: string
   status: 'draft' | 'published'
   author_id: string
-  author?: Author
-  category: string
-  tags: string[]
+  featured_image?: string
+  seo_title?: string
+  seo_description?: string
+  view_count: number
+  published_at?: string
   created_at: string
   updated_at: string
-  views: number
+  deleted_at?: string
+  is_archived: boolean
 }
 
 export interface PostMetadata {
@@ -230,4 +233,14 @@ export interface PostVersion {
   version_type: 'auto' | 'manual'
   description?: string
   created_at: string
+}
+
+export interface User {
+  id: string
+  email: string
+  name: string
+  avatar_url?: string
+  role: 'user' | 'admin'
+  created_at: string
+  updated_at: string
 }
