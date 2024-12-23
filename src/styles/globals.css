@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .prose {
+    @apply max-w-none;
+  }
+
+  .prose a {
+    @apply text-primary-600 hover:text-primary-700 transition-colors;
+  }
+
+  .prose blockquote {
+    @apply border-l-4 border-primary pl-4 italic;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

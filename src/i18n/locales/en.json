@@ -1,0 +1,40 @@
+{
+  "editor": {
+    "edit": "Edit",
+    "preview": "Preview",
+    "save": "Save",
+    "saving": "Saving...",
+    "update": "Update",
+    "publish": "Publish",
+    "errors": {
+      "save_failed": "Failed to save",
+      "title_required": "Title is required",
+      "content_required": "Content is required"
+    }
+  },
+  "blog": {
+    "categories": "Categories",
+    "tags": "Tags",
+    "view_all": "View All",
+    "read_more": "Read More",
+    "published_at": "Published at {{date}}",
+    "loading": "Loading...",
+    "error": "Failed to load"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error occurred",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "save": "Save"
+  },
+  "nav": {
+    "home": "Home",
+    "blog": "Blog",
+    "projects": "Projects",
+    "about": "About"
+  }
+} 

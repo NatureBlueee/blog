@@ -1,0 +1,90 @@
+---
+title: "Next.js 入门指南"
+excerpt: "学习如何使用 Next.js 13+ 构建现代化的 Web 应用，包括服务器组件、数据获取和路由等核心概念。"
+date: "2024-01-01"
+author:
+  name: "张三"
+  avatar: "/images/avatar.jpg"
+  bio: "全栈开发工程师，热衷于分享 Web 开发技术和经验"
+category: "Next.js"
+tags: ["React", "Next.js", "Web开发", "前端"]
+---
+
+# Next.js 入门指南
+
+Next.js 是一个用于生产环境的 React 框架，它提供了许多开箱即用的功能，让开发者能够快速构建高性能的 Web 应用。
+
+## 为什么选择 Next.js？
+
+Next.js 提供了许多优秀的特性：
+
+- **服务器组件**: 默认服务器端渲染，提升性能和 SEO
+- **文件系统路由**: 基于文件系统的直观路由
+- **数据获取**: 简化的数据获取方法
+- **自动代码分割**: 智能的代码分割策略
+- **TypeScript 支持**: 一流的 TypeScript 支持
+
+## 快速开始
+
+创建一个新的 Next.js 项目：
+
+\`\`\`bash
+npx create-next-app@latest my-app
+cd my-app
+npm run dev
+\`\`\`
+
+## 项目结构
+
+一个典型的 Next.js 项目结构：
+
+\`\`\`
+my-app/
+├── app/
+│ ├── layout.tsx
+│ └── page.tsx
+├── components/
+├── public/
+└── package.json
+\`\`\`
+
+## 路由系统
+
+Next.js 13+ 使用基于文件系统的路由：
+
+\`\`\`typescript
+// app/page.tsx
+export default function Home() {
+return <h1>Welcome to Next.js!</h1>
+}
+\`\`\`
+
+## 数据获取
+
+使用服务器组件获取数据：
+
+\`\`\`typescript
+async function getData() {
+const res = await fetch('https://api.example.com/data')
+return res.json()
+}
+
+export default async function Page() {
+  const data = await getData()
+  return <main>{/* 使用数据 */}</main>
+}
+\`\`\`
+
+## 部署
+
+Next.js 应用可以轻松部署到 Vercel：
+
+1. 推送代码到 GitHub
+2. 在 Vercel 中导入项目
+3. 自动部署和更新
+
+## 结论
+
+Next.js 是一个强大的 React 框架，它简化了现代 Web 应用的开发流程。通过本指南，你已经了解了 Next.js 的基础知识，可以开始构建你的第一个应用了。
+
+记住要查看 [Next.js 官方文档](https://nextjs.org/docs) 获取更多详细信息！
