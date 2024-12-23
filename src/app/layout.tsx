@@ -1,32 +1,30 @@
-import { Providers } from './providers'
-import RootLayout from '@/components/layout/RootLayout'
-import '@/styles/globals.css'
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import { ThemeProvider } from '@/components/theme-provider'
+import './globals.css'
+import { Toaster } from '@/components/ui/toaster'
 
-export const metadata = {
-  title: 'My Blog',
-  description: '个人博客网站',
+const inter = Inter({ subsets: ['latin'] })
+
+export const metadata: Metadata = {
+  title: '我的博客',
+  description: '分享技术见解和开发经验',
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="zh">
-      <head>
-        <link 
-          rel="stylesheet" 
-          href="https://cdn.jsdelivr.net/npm/stackedit@latest/dist/css/stackedit.min.css" 
-        />
-        <script 
-          src="https://cdn.jsdelivr.net/npm/stackedit@latest/dist/js/stackedit.min.js"
-          defer
-        />
-      </head>
-      <body>
-        <Providers>{children}</Providers>
+    <html lang='zh-CN' suppressHydrationWarning>
+      <body className={inter.className}>
+        <ThemeProvider
+          attribute='class'
+          defaultTheme='system'
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
+        <Toaster />
       </body>
     </html>
   )
-} 
+}

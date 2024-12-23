@@ -1,19 +1,19 @@
 import { NextResponse } from 'next/server'
-import { getAllPosts } from '@/lib/posts'
+import { supabase } from '@/lib/supabase'
 
 export async function GET() {
   try {
-    const posts = await getAllPosts()
-    const popularPosts = posts
-      .sort((a, b) => b.views - a.views)
-      .slice(0, 5)
+    const { data: posts, error } = await supabase
+      .from('posts')
+      .select('id, title, slug, created_at, views')
+      .order('views', { ascending: false })
+      .limit(5)
     
-    return NextResponse.json(popularPosts)
+    if (error) throw error
+    
+    return NextResponse.json(posts)
   } catch (error) {
     console.error('获取热门文章失败:', error)
-    return NextResponse.json(
-      { error: '获取热门文章失败' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: '获取热门文章失败' }, { status: 500 })
   }
 } 

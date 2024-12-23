@@ -1,76 +1,67 @@
 import Link from 'next/link'
-import { getAllPosts } from '@/lib/posts'
-import dynamic from 'next/dynamic'
-
-const HeroSection = dynamic(() => import('@/components/home/HeroSection'), {
-  ssr: true
-})
-
-const LatestPosts = dynamic(() => import('@/components/home/LatestPosts'), {
-  ssr: true
-})
+import { postService } from '@/lib/services/posts'
+import { PostCard } from '@/components/blog/PostCard'
 
 export default async function HomePage() {
-  const posts = await getAllPosts()
+  // 获取最新的3篇文章
+  const latestPosts = (await postService.getPosts({ status: 'published', limit: 3 })) || []
 
   return (
-    <main className="flex-1">
-      <HeroSection />
-
-      {/* Latest Posts Section */}
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between mb-12">
-            <h2 className="text-3xl font-bold">最新文章</h2>
+    <div className='min-h-screen'>
+      {/* Hero Section */}
+      <section className='relative h-[70vh] flex items-center justify-center overflow-hidden'>
+        <div className='absolute inset-0 bg-gradient-to-r from-primary/10 via-background to-secondary/10 animate-gradient-x' />
+        <div className='relative z-10 text-center space-y-6 max-w-3xl mx-auto px-4'>
+          <h1 className='text-5xl md:text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary animate-text'>
+            探索思维的边界
+          </h1>
+          <p className='text-xl text-muted-foreground'>
+            在这里，我们一起探讨技术、哲学与生活的交织
+          </p>
+          <div className='flex gap-4 justify-center'>
             <Link
-              href="/blog"
-              className="text-primary hover:text-primary-dark transition-colors"
+              href='/blog'
+              className='px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors'
             >
-              查看全部 →
+              开始阅读
+            </Link>
+            <Link
+              href='/about'
+              className='px-6 py-3 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 transition-colors'
+            >
+              了解更多
             </Link>
           </div>
-
-          {posts.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-600 dark:text-gray-400">暂无文章</p>
-            </div>
-          ) : (
-            <LatestPosts posts={posts} />
-          )}
         </div>
       </section>
 
-      {/* About Section */}
-      <section className="bg-gray-50 dark:bg-gray-900/50 py-20">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl font-bold mb-6">关于我</h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300 mb-8">
-              我是一名热爱技术的前端开发者，专注于 React、Next.js 和 TypeScript。
-              通过这个博客，我希望能够分享我的学习经验和技术见解。
-            </p>
+      {/* Latest Posts Section */}
+      <section className='container py-16'>
+        <h2 className='text-3xl font-bold text-center mb-12'>最新文章</h2>
+        <div className='grid gap-8 md:grid-cols-2 lg:grid-cols-3'>
+          {latestPosts.map((post) => (
+            <PostCard key={post.id} post={post} />
+          ))}
+        </div>
+        {latestPosts.length > 0 && (
+          <div className='text-center mt-12'>
             <Link
-              href="/about"
-              className="inline-flex items-center text-primary hover:text-primary-dark transition-colors"
+              href='/blog'
+              className='inline-flex items-center text-primary hover:text-primary/90 transition-colors'
             >
-              了解更多
-              <svg
-                className="ml-2 w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              浏览更多文章
+              <svg className='ml-2 h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                 <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
                   strokeWidth={2}
-                  d="M9 5l7 7-7 7"
+                  d='M9 5l7 7-7 7'
                 />
               </svg>
             </Link>
           </div>
-        </div>
+        )}
       </section>
-    </main>
+    </div>
   )
-} 
+}

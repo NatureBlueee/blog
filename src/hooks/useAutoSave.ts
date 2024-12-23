@@ -1,51 +1,68 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useDebounce } from 'use-debounce'
+'use client'
 
-interface AutoSaveOptions<T> {
+import { useState, useEffect, useRef } from 'react'
+import { debounce } from 'lodash'
+
+interface UseAutoSaveProps<T> {
   data: T
   onSave: (data: T) => Promise<void>
-  interval?: number
   enabled?: boolean
-  compareData?: (a: T, b: T) => boolean
+  interval?: number
+  delay?: number
 }
 
 export function useAutoSave<T>({
   data,
   onSave,
-  interval = 1000,
   enabled = true,
-  compareData = (a, b) => JSON.stringify(a) === JSON.stringify(b)
-}: AutoSaveOptions<T>) {
-  const [initialData] = useState(data)
-  const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  interval = 30000, // 30秒
+  delay = 1000     // 1秒防抖
+}: UseAutoSaveProps<T>) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [debouncedData] = useDebounce(data, interval)
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const lastDataRef = useRef<T>(data)
 
-  const handleSave = useCallback(async () => {
-    if (!enabled || isSubmitting) return
-    if (compareData(debouncedData, initialData)) return
-
+  const debouncedSave = debounce(async (currentData: T) => {
     try {
       setIsSubmitting(true)
       setError(null)
-      await onSave(debouncedData)
+      await onSave(currentData)
       setLastSaved(new Date())
+      lastDataRef.current = currentData
     } catch (err) {
       setError(err instanceof Error ? err.message : '自动保存失败')
-      throw err
+      console.error('自动保存失败:', err)
     } finally {
       setIsSubmitting(false)
     }
-  }, [debouncedData, initialData, enabled, isSubmitting, onSave, compareData])
+  }, delay)
 
   useEffect(() => {
-    handleSave()
-  }, [debouncedData, handleSave])
+    if (!enabled) return
+
+    const hasChanged = JSON.stringify(data) !== JSON.stringify(lastDataRef.current)
+    if (hasChanged) {
+      debouncedSave(data)
+    }
+
+    const intervalId = setInterval(() => {
+      const currentData = data
+      const hasChanged = JSON.stringify(currentData) !== JSON.stringify(lastDataRef.current)
+      if (hasChanged) {
+        debouncedSave(currentData)
+      }
+    }, interval)
+
+    return () => {
+      clearInterval(intervalId)
+      debouncedSave.cancel()
+    }
+  }, [data, enabled, interval, debouncedSave])
 
   return {
-    lastSaved,
     isSubmitting,
-    error
+    error,
+    lastSaved
   }
 } 

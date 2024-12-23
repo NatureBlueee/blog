@@ -1,19 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import { HiPlus, HiSearch, HiFilter } from 'react-icons/hi'
+import { HiPlus, HiSearch } from 'react-icons/hi'
 import PostList from '@/components/admin/PostList'
 import PageLayout from '@/components/layout/PageLayout'
 
 export default function AdminPostsPage() {
   const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('all')
-  const [status, setStatus] = useState('all')
-  const [posts, setPosts] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-
-  // ... 搜索和筛选逻辑
   
   return (
     <PageLayout>
@@ -31,10 +25,16 @@ export default function AdminPostsPage() {
                 className="pl-10 pr-4 py-2 border rounded-lg"
               />
             </div>
-            {/* 添加分类和状态筛选 */}
+            <Link 
+              href="/admin/posts/new"
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
+            >
+              <HiPlus className="w-5 h-5" />
+              新建文章
+            </Link>
           </div>
         </div>
-        <PostList posts={posts} />
+        <PostList />
       </div>
     </PageLayout>
   )

@@ -1,190 +1,173 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
+import { zhCN } from 'date-fns/locale'
 import type { BlogPost } from '@/types'
-import type { IconType } from 'react-icons'
-import { HiEye, HiPencil, HiTrash, HiPlus } from 'react-icons/hi'
-import BulkActions from './BulkActions'
+import { HiEye, HiPencil, HiTrash, HiPlus, HiClock } from 'react-icons/hi'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
 
-interface PostListProps {
-  posts: BlogPost[]
+interface PostVersion {
+  id: string
+  version_type: 'auto' | 'manual'
+  description: string | null
+  created_at: string
 }
 
-export default function PostList({ posts: initialPosts }: PostListProps) {
-  const [posts, setPosts] = useState(initialPosts)
-  const [selectedPosts, setSelectedPosts] = useState<string[]>([])
+export default function PostList() {
+  const [posts, setPosts] = useState<BlogPost[]>([])
+  const [activeTab, setActiveTab] = useState<'all' | 'published' | 'draft'>('all')
+  const [selectedPost, setSelectedPost] = useState<
+    (BlogPost & { versions?: PostVersion[] }) | null
+  >(null)
+  const [isVersionsModalOpen, setIsVersionsModalOpen] = useState(false)
 
-  const handleDelete = async (slug: string) => {
-    if (!confirm('确定要删除这篇文章吗？')) return
+  useEffect(() => {
+    fetchPosts()
+  }, [activeTab])
 
+  const fetchPosts = async () => {
     try {
-      const response = await fetch(`/api/posts/${slug}`, {
-        method: 'DELETE'
-      })
-
-      if (!response.ok) throw new Error('删除失败')
-
-      setPosts(posts.filter(post => post.slug !== slug))
-    } catch (error) {
-      console.error('删除文章失败:', error)
-      alert('删除文章失败')
-    }
-  }
-
-  const handleBulkDelete = async (slugs: string[]) => {
-    if (!confirm(`确定要删除选中的 ${slugs.length} 篇文章吗？`)) return
-
-    try {
-      await Promise.all(
-        slugs.map(slug =>
-          fetch(`/api/posts/${slug}`, { method: 'DELETE' })
-        )
+      const response = await fetch(
+        '/api/posts' + (activeTab !== 'all' ? `?status=${activeTab}` : '')
       )
-      setPosts(posts.filter(post => !slugs.includes(post.slug)))
-      setSelectedPosts([])
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || '获取文章列表失败')
+      }
+      const data = await response.json()
+      setPosts(data)
     } catch (error) {
-      console.error('批量删除失败:', error)
-      alert('批量删除失败')
+      console.error('获取文章列表失败:', error)
     }
   }
 
-  const handleBulkExport = async (slugs: string[]) => {
+  const handleViewVersions = async (post: BlogPost) => {
     try {
-      const response = await fetch('/api/posts/export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slugs })
-      })
+      const response = await fetch(`/api/posts/${post.slug}/versions`)
+      if (!response.ok) throw new Error('获取版本历史失败')
 
-      if (!response.ok) throw new Error('导出失败')
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `posts-${format(new Date(), 'yyyy-MM-dd')}.zip`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      const versions = await response.json()
+      setSelectedPost({ ...post, versions })
+      setIsVersionsModalOpen(true)
     } catch (error) {
-      console.error('导出失败:', error)
-      alert('导出失败')
+      console.error('获取版本历史失败:', error)
     }
   }
 
-  const handleBulkCopy = async (slugs: string[]) => {
+  const handleRestoreVersion = async (post: BlogPost, versionId: string) => {
     try {
-      const response = await fetch('/api/posts/copy', {
+      const response = await fetch(`/api/posts/${post.slug}/versions/${versionId}/restore`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slugs })
       })
+      if (!response.ok) throw new Error('恢复版本失败')
 
-      if (!response.ok) throw new Error('复制失败')
-
-      const newPosts = await response.json()
-      setPosts([...newPosts, ...posts])
-      setSelectedPosts([])
+      const updatedPost = await response.json()
+      setPosts(posts.map((p) => (p.slug === post.slug ? { ...p, ...updatedPost } : p)))
+      setIsVersionsModalOpen(false)
     } catch (error) {
-      console.error('批量复制失败:', error)
-      alert('批量复制失败')
+      console.error('恢复版本失败:', error)
     }
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <BulkActions
-          selectedIds={selectedPosts}
-          onDeleteAction={handleBulkDelete}
-          onExportAction={handleBulkExport}
-          onCopyAction={handleBulkCopy}
-        />
-        <Link
-          href="/admin/posts/new"
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          <HiPlus className="w-5 h-5 mr-2" />
-          新建文章
+    <div className='space-y-4'>
+      <div className='flex justify-between items-center'>
+        <div className='flex gap-4'>
+          <Button
+            variant={activeTab === 'all' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('all')}
+          >
+            全部
+          </Button>
+          <Button
+            variant={activeTab === 'published' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('published')}
+          >
+            已发布
+          </Button>
+          <Button
+            variant={activeTab === 'draft' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('draft')}
+          >
+            草稿
+          </Button>
+        </div>
+        <Link href='/admin/posts/new'>
+          <Button>
+            <HiPlus className='w-4 h-4 mr-1' />
+            新建文章
+          </Button>
         </Link>
       </div>
-      
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50 dark:bg-gray-700">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                标题
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                分类
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                发布日期
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                状态
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                操作
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-            {posts.map((post) => (
-              <tr key={post.slug} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900 dark:text-white">
-                    {post.title}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700">
-                    {post.category}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
-                  {format(new Date(post.date), 'yyyy-MM-dd')}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    post.status === 'published'
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                      : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
-                  }`}>
-                    {post.status === 'published' ? '已发布' : '草稿'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <div className="flex justify-end space-x-3">
-                    <Link
-                      href={`/blog/${post.slug}`}
-                      className="text-gray-400 hover:text-gray-500"
-                    >
-                      <HiEye className="w-5 h-5" />
-                    </Link>
-                    <Link
-                      href={`/admin/posts/${post.slug}/edit`}
-                      className="text-blue-400 hover:text-blue-500"
-                    >
-                      <HiPencil className="w-5 h-5" />
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(post.slug)}
-                      className="text-red-400 hover:text-red-500"
-                    >
-                      <HiTrash className="w-5 h-5" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+      <div className='grid gap-4'>
+        {posts.map((post) => (
+          <div key={post.id} className='p-4 border rounded-lg flex justify-between items-center'>
+            <div>
+              <h3 className='font-medium'>{post.title}</h3>
+              <div className='text-sm text-gray-500'>
+                {format(new Date(post.updated_at), 'PPP', { locale: zhCN })}
+              </div>
+            </div>
+            <div className='flex items-center gap-2'>
+              <Badge variant={post.status === 'published' ? 'default' : 'secondary'}>
+                {post.status === 'published' ? '已发布' : '草稿'}
+              </Badge>
+              <Button variant='outline' size='sm' onClick={() => handleViewVersions(post)}>
+                <HiClock className='w-4 h-4 mr-1' />
+                版本历史
+              </Button>
+              <Link href={`/admin/posts/${post.slug}/edit`}>
+                <Button variant='outline' size='sm'>
+                  <HiPencil className='w-4 h-4 mr-1' />
+                  编辑
+                </Button>
+              </Link>
+            </div>
+          </div>
+        ))}
       </div>
+
+      <Dialog open={isVersionsModalOpen} onOpenChange={setIsVersionsModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>版本历史</DialogTitle>
+          </DialogHeader>
+          {selectedPost?.versions && (
+            <div className='space-y-4'>
+              {selectedPost.versions.map((version) => (
+                <div
+                  key={version.id}
+                  className='flex items-center justify-between p-4 border rounded-lg'
+                >
+                  <div>
+                    <div className='text-sm text-gray-500'>
+                      {format(new Date(version.created_at), 'PPP HH:mm:ss', { locale: zhCN })}
+                    </div>
+                    <div className='text-sm'>
+                      {version.version_type === 'auto' ? '自动保存' : '手动保存'}
+                    </div>
+                    {version.description && (
+                      <div className='text-sm text-gray-600'>{version.description}</div>
+                    )}
+                  </div>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    onClick={() => handleRestoreVersion(selectedPost, version.id)}
+                  >
+                    恢复此版本
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
-} 
+}

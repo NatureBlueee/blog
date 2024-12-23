@@ -24,16 +24,19 @@ export interface BaseResponse<T> {
 
 // 博客相关类型
 export interface Post {
-  slug: string
+  id: string
   title: string
+  slug: string
   content: string
   excerpt: string
-  date: string
-  author: Author
+  status: 'draft' | 'published'
+  author_id: string
+  author?: Author
   category: string
   tags: string[]
-  status: Status
-  lastModified?: string
+  created_at: string
+  updated_at: string
+  views: number
 }
 
 export interface PostMetadata {
@@ -47,10 +50,10 @@ export interface PostMetadata {
 }
 
 export interface Author {
+  id: string
   name: string
-  avatar: string
-  bio: string
-  social?: SocialLinks
+  avatar?: string
+  bio?: string
 }
 
 export interface SocialLinks {
@@ -96,21 +99,28 @@ export type PostStatus = 'draft' | 'published' | 'archived'
 
 export interface PostVersion {
   id: string
-  timestamp: string
+  post_id: string
   content: string
+  metadata: any
+  version_type: 'auto' | 'manual'
+  description: string | null
+  created_at: string
+  created_by: string | null
+  authors?: {
+    name: string
+  }
 }
 
 export interface BlogPost {
+  id: string
   slug: string
   title: string
   content: string
-  excerpt: string
-  date: string
-  author: Author
-  category: string
-  tags: string[]
-  status: PostStatus
-  readTime: number
+  status: 'draft' | 'published'
+  created_at: string
+  updated_at: string
+  author_id: string
+  metadata?: any
 }
 
 export interface EditorBaseProps {
@@ -166,4 +176,58 @@ export interface ImageProps {
   height?: number
   priority?: boolean
   className?: string
-} 
+}
+
+export interface PostFormData {
+  title: string
+  slug: string
+  excerpt?: string
+  content: string
+  status: 'draft' | 'published'
+  category?: string
+  tags: string[]
+}
+
+export interface CreatePostInput {
+  title: string
+  content: string
+  excerpt?: string
+  slug: string
+  status?: 'draft' | 'published'
+  category?: string
+  tags?: string[]
+  versionDescription?: string
+}
+
+export interface UpdatePostInput extends Partial<CreatePostInput> {
+  versionDescription?: string
+}
+
+export interface BlogPost {
+  id: string
+  title: string
+  slug: string
+  content: string
+  excerpt?: string
+  category?: string
+  tags?: string[]
+  status: 'draft' | 'published'
+  views: number
+  created_at: string
+  updated_at: string
+}
+
+export interface PostVersion {
+  id: string
+  post_id: string
+  content: string
+  metadata: {
+    title: string
+    excerpt?: string
+    category?: string
+    tags?: string[]
+  }
+  version_type: 'auto' | 'manual'
+  description?: string
+  created_at: string
+}
