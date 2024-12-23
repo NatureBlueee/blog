@@ -1,54 +1,77 @@
-import { BlogPost } from '@/types'
-import Link from 'next/link'
+'use client'
+
+import { useState } from 'react'
+import { HiHeart, HiShare } from 'react-icons/hi'
+import { Button } from '@/components/ui/button'
+import { toast } from '@/components/ui/use-toast'
+import type { Post } from '@/types'
 
 interface PostFooterProps {
-  post: BlogPost
+  post: Post
 }
 
 export function PostFooter({ post }: PostFooterProps) {
+  const [likes, setLikes] = useState(post.likes || 0)
+  const [hasLiked, setHasLiked] = useState(false)
+
+  const handleLike = async () => {
+    if (hasLiked) return
+
+    try {
+      const response = await fetch(`/api/posts/${post.slug}/like`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) throw new Error('点赞失败')
+
+      setLikes((prev) => prev + 1)
+      setHasLiked(true)
+
+      toast({
+        description: '感谢你的喜欢！',
+      })
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        description: '点赞失败，请稍后重试',
+      })
+    }
+  }
+
+  const handleShare = async () => {
+    try {
+      await navigator.share({
+        title: post.title,
+        text: post.excerpt,
+        url: window.location.href,
+      })
+    } catch (error) {
+      // 如果浏览器不支持 share API，则复制链接
+      navigator.clipboard.writeText(window.location.href)
+      toast({
+        description: '链接已复制到剪贴板',
+      })
+    }
+  }
+
   return (
-    <footer className="mt-16 space-y-8 border-t pt-8">
-      {/* 标签 */}
-      {post.tags && post.tags.length > 0 && (
-        <div className="flex gap-2">
-          {post.tags.map((tag) => (
-            <Link
-              key={tag}
-              href={`/blog/tags/${tag}`}
-              className="px-3 py-1 bg-muted rounded-full text-sm hover:bg-muted/80 transition-colors"
-            >
-              {tag}
-            </Link>
-          ))}
-        </div>
-      )}
-      
-      {/* 分享按钮 */}
-      <div className="flex items-center gap-4">
-        <span className="text-sm text-muted-foreground">分享文章：</span>
-        <button
-          onClick={() => {
-            navigator.clipboard.writeText(window.location.href)
-            // 这里可以添加一个toast提示
-          }}
-          className="p-2 hover:bg-muted rounded-full transition-colors"
-          aria-label="复制链接"
+    <footer className='mt-8 pt-8 border-t'>
+      <div className='flex justify-center gap-4'>
+        <Button
+          variant='outline'
+          size='lg'
+          className={hasLiked ? 'text-primary' : ''}
+          onClick={handleLike}
         >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
-            />
-          </svg>
-        </button>
+          <HiHeart className='w-5 h-5 mr-2' />
+          {likes} 喜欢
+        </Button>
+
+        <Button variant='outline' size='lg' onClick={handleShare}>
+          <HiShare className='w-5 h-5 mr-2' />
+          分享
+        </Button>
       </div>
     </footer>
   )
-} 
+}

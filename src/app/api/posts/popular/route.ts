@@ -1,19 +1,20 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { postService } from '@/lib/services/posts'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { data: posts, error } = await supabase
-      .from('posts')
-      .select('id, title, slug, created_at, views')
-      .order('views', { ascending: false })
-      .limit(5)
-    
-    if (error) throw error
-    
+    const { searchParams } = new URL(request.url)
+    const limit = Number(searchParams.get('limit')) || 5
+
+    const posts = await postService.getPosts({
+      status: 'published',
+      orderBy: { views: 'desc' },
+      limit,
+    })
+
     return NextResponse.json(posts)
   } catch (error) {
     console.error('获取热门文章失败:', error)
     return NextResponse.json({ error: '获取热门文章失败' }, { status: 500 })
   }
-} 
+}

@@ -116,14 +116,16 @@ export interface PostVersion {
 
 export interface BlogPost {
   id: string
-  slug: string
   title: string
+  slug: string
   content: string
-  status: 'draft' | 'published'
-  created_at: string
-  updated_at: string
-  author_id: string
-  metadata?: any
+  status: PostStatus
+  createdAt: string
+  updatedAt: string
+  publishedAt?: string
+  views: number
+  author?: Author
+  tags: Tag[]
 }
 
 export interface EditorBaseProps {
@@ -243,4 +245,10 @@ export interface User {
   role: 'user' | 'admin'
   created_at: string
   updated_at: string
+}
+
+export interface Tag {
+  id: string
+  name: string
+  slug: string
 }

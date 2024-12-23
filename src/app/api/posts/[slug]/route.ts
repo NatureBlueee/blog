@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server'
-import { PostService } from '@/lib/services/posts'
-import { DatabaseError } from '@/lib/errors'
+import { postService } from '@/lib/services/posts'
 
 export async function GET(request: Request, { params }: { params: { slug: string } }) {
   try {
-    const postService = new PostService()
     const post = await postService.getPostBySlug(params.slug)
 
     if (!post) {

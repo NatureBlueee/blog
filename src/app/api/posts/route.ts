@@ -1,16 +1,22 @@
 import { NextResponse } from 'next/server'
 import { PostService } from '@/lib/services/posts'
-import { getAuthUser } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get('status') as 'published' | 'draft' | null
+
     const postService = new PostService()
-    const posts = await postService.getAllPosts()
+    const posts = await postService.getAllPosts({ status })
+
     return NextResponse.json(posts)
   } catch (error) {
-    console.error('获取文章列表失败:', error)
+    console.error('API Error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : '获取文章列表失败' },
+      {
+        error: error instanceof Error ? error.message : '获取文章列表失败',
+        details: error instanceof Error ? error.stack : undefined,
+      },
       { status: 500 }
     )
   }
