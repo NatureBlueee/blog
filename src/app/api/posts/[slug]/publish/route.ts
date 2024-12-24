@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { postService } from '@/lib/services/posts'
+import { postService } from '@/lib/services/post'
 
 export async function POST(request: NextRequest, { params }: { params: { slug: string } }) {
   try {

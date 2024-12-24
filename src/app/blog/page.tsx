@@ -1,48 +1,46 @@
 import { BlogList } from '@/components/blog/BlogList'
-import { postService } from '@/lib/services/posts'
-import { tagService } from '@/lib/services/tags'
+import { handleError } from '@/utils/error'
+import { ErrorComponent } from '@/components/ui/error'
 
 export default async function BlogPage() {
   try {
-    const [posts, tags] = await Promise.all([
-      postService.getPosts({ status: 'published' }),
-      tagService.getTags(),
-    ])
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+    console.log('BlogPage: Fetching from URL:', `${baseUrl}/api/posts`)
 
-    if (!Array.isArray(posts)) {
-      console.error('Posts data is not an array:', posts)
+    const res = await fetch(`${baseUrl}/api/posts`, {
+      next: { revalidate: 60 },
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    console.log('BlogPage: Response status:', res.status)
+
+    if (!res.ok) {
+      throw new Error(`获取文章失败: ${res.statusText}`)
+    }
+
+    const { data: posts } = await res.json()
+    console.log('BlogPage: Posts received:', posts?.length)
+
+    if (!posts?.length) {
       return (
         <div className='container mx-auto px-4 py-8'>
-          <div className='bg-red-50 border border-red-200 rounded-lg p-4'>
-            <h2 className='text-red-800 font-semibold mb-2'>加载文章失败</h2>
-            <p className='text-red-600'>错误：数据格式不正确</p>
-            <p className='text-red-500 text-sm mt-2'>收到的数据：{JSON.stringify(posts)}</p>
-          </div>
+          <p className='text-gray-600'>暂无文章</p>
         </div>
       )
     }
 
     return (
       <div className='container mx-auto px-4 py-8'>
-        <BlogList initialPosts={posts} tags={tags || []} />
+        <BlogList posts={posts} />
       </div>
     )
   } catch (error) {
-    console.error('Failed to load blog posts:', error)
-    return (
-      <div className='container mx-auto px-4 py-8'>
-        <div className='bg-red-50 border border-red-200 rounded-lg p-4'>
-          <h2 className='text-red-800 font-semibold mb-2'>加载文章失败</h2>
-          <p className='text-red-600'>
-            错误：{error instanceof Error ? error.message : String(error)}
-          </p>
-          {process.env.NODE_ENV === 'development' && (
-            <pre className='mt-4 p-2 bg-red-100 rounded text-sm overflow-auto'>
-              {JSON.stringify(error, null, 2)}
-            </pre>
-          )}
-        </div>
-      </div>
-    )
+    console.error('BlogPage: Error details:', {
+      message: error instanceof Error ? error.message : '未知错误',
+      stack: error instanceof Error ? error.stack : undefined,
+    })
+    return <ErrorComponent error={handleError(error)} />
   }
 }

@@ -1,33 +1,41 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { databaseService } from '@/lib/services/database'
 import { ConnectionStatus } from './ConnectionStatus'
 import { TableStats } from './TableStats'
 import { HealthStatus } from './HealthStatus'
 import { DashboardStats } from './DashboardStats'
+import { Button } from '@/components/ui/button'
+import { RefreshCw } from 'lucide-react'
 
 export function DatabaseStatus() {
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const queryClient = useQueryClient()
 
-  // 移除自动刷新，只在组件挂载和手动刷新时获取数据
+  // 数据库状态查询
   const {
     data: status,
-    isLoading,
+    isLoading: isStatusLoading,
     refetch: refetchStatus,
   } = useQuery({
     queryKey: ['database-status'],
     queryFn: () => databaseService.getStatus(),
     refetchOnWindowFocus: false,
     refetchOnMount: true,
-    refetchInterval: false, // 禁用自动刷新
-    staleTime: Infinity, // 数据永不过期
-    cacheTime: 1000 * 60 * 30, // 缓存30分钟
+    refetchInterval: false,
+    staleTime: Infinity,
+    cacheTime: 1000 * 60 * 30,
     retry: 1,
   })
 
-  const { data: dashboardStats, refetch: refetchDashboard } = useQuery({
+  // 仪表盘统计查询
+  const {
+    data: dashboardStats,
+    isLoading: isDashboardLoading,
+    refetch: refetchDashboard,
+  } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => databaseService.getDashboardStats(),
     refetchOnWindowFocus: false,
@@ -38,10 +46,15 @@ export function DatabaseStatus() {
     retry: 1,
   })
 
+  // 同步刷新所有数据
   const handleRefresh = async () => {
     setIsRefreshing(true)
     try {
       await Promise.all([refetchStatus(), refetchDashboard()])
+
+      // 通知其他使用相同查询键的组件更新
+      await queryClient.invalidateQueries({ queryKey: ['database-status'] })
+      await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
     } catch (error) {
       console.error('刷新数据失败:', error)
     } finally {
@@ -49,21 +62,27 @@ export function DatabaseStatus() {
     }
   }
 
-  if (isLoading) return <div>加载中...</div>
+  if (isStatusLoading || isDashboardLoading) {
+    return <div className='p-4 text-center'>加载中...</div>
+  }
 
   return (
-    <div className='p-4 border rounded-lg bg-card'>
-      <div className='flex justify-between items-center mb-4'>
-        <h2 className='text-lg font-bold'>数据库状态</h2>
-        <button
+    <div className='space-y-4'>
+      <div className='flex justify-between items-center'>
+        <h2 className='text-lg font-semibold'>数据库状态</h2>
+        <Button
+          size='sm'
+          variant='outline'
           onClick={handleRefresh}
           disabled={isRefreshing}
-          className='px-3 py-1 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50'
+          className='flex items-center gap-2'
         >
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           {isRefreshing ? '刷新中...' : '刷新'}
-        </button>
+        </Button>
       </div>
-      <div className='space-y-4'>
+
+      <div className='grid gap-4'>
         <ConnectionStatus status={status?.connection} />
         <TableStats stats={status?.tables} />
         <HealthStatus health={status?.health} />

@@ -135,40 +135,33 @@ class DatabaseService extends BaseService {
   }
 
   private async checkHealth() {
-    const checks = []
     const tables = ['posts', 'tags', 'categories', 'comments', 'users']
+    const health: Record<string, boolean> = {}
 
     try {
-      // 检查连接
+      // 检查数据库连接
       const { error: connectionError } = await this.supabase.from('posts').select('id').limit(1)
 
-      checks.push({
-        name: '数据库连接',
-        status: connectionError ? 'error' : 'healthy',
-        error: connectionError?.message,
-      })
+      health.database = !connectionError
 
-      // 检查表访问权限
+      // 检查各个表的访问权限
       for (const table of tables) {
         const { error } = await this.supabase.from(table).select('id').limit(1)
 
-        checks.push({
-          name: `${table}表访问`,
-          status: error ? 'error' : 'healthy',
-          error: error?.message,
-        })
+        health[table] = !error
       }
 
-      return checks
+      return health
     } catch (error) {
       console.error('健康检查失败:', error)
-      return [
-        {
-          name: '健康检查',
-          status: 'error',
-          error: error instanceof Error ? error.message : '未知错误',
-        },
-      ]
+      return {
+        database: false,
+        posts: false,
+        tags: false,
+        categories: false,
+        comments: false,
+        users: false,
+      }
     }
   }
 
@@ -182,6 +175,20 @@ class DatabaseService extends BaseService {
     ]
 
     return relationships
+  }
+
+  async getPostsPreview() {
+    return this.transaction(async () => {
+      const { data, error } = await this.supabase
+        .from('posts')
+        .select('id, title, slug, status, created_at')
+        .order('created_at', { ascending: false })
+        .limit(10)
+        .is('deleted_at', null)
+
+      if (error) throw error
+      return data
+    }, '获取文章预览')
   }
 }
 

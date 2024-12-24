@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
-import { postService } from '@/lib/services/posts'
+import { postService } from '@/lib/services/post'
 
 export async function GET() {
   try {
+    console.log('API Route: Fetching posts...')
     const posts = await postService.getPosts({ status: 'published' })
+    console.log('API Route: Posts fetched:', posts?.length)
     return NextResponse.json({ data: posts })
   } catch (error) {
-    console.error('Failed to fetch posts:', error)
+    console.error('API Route: Failed to fetch posts:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '获取文章失败' },
       { status: 500 }

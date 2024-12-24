@@ -1,66 +1,104 @@
-import Link from 'next/link'
-import { postService } from '@/lib/services/posts'
-import { PostCard } from '@/components/blog/PostCard'
+'use client'
 
-export default async function HomePage() {
-  // 获取最新的3篇文章
-  const latestPosts = (await postService.getPosts({ status: 'published', limit: 3 })) || []
+import Link from 'next/link'
+import { useQuery } from '@tanstack/react-query'
+import { postService } from '@/lib/services/post'
+import { PostCard } from '@/components/blog/PostCard'
+import { Button } from '@/components/ui/button'
+import { motion } from 'framer-motion'
+import { ArrowRight } from 'lucide-react'
+
+export default function HomePage() {
+  // 获取最新的6篇文章
+  const { data: posts } = useQuery({
+    queryKey: ['featured-posts'],
+    queryFn: () => postService.getPosts({ status: 'published', limit: 6 }),
+    staleTime: 1000 * 60 * 5,
+  })
+
+  const featuredPosts = posts?.slice(0, 3)
+  const recentPosts = posts?.slice(3, 6)
 
   return (
     <div className='min-h-screen'>
-      {/* Hero Section */}
-      <section className='relative h-[70vh] flex items-center justify-center overflow-hidden'>
-        <div className='absolute inset-0 bg-gradient-to-r from-primary/10 via-background to-secondary/10 animate-gradient-x' />
-        <div className='relative z-10 text-center space-y-6 max-w-3xl mx-auto px-4'>
-          <h1 className='text-5xl md:text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary animate-text'>
+      {/* Hero Section - 改进视觉效果 */}
+      <section className='relative h-[80vh] flex items-center justify-center overflow-hidden bg-gradient-to-b from-background to-primary/5'>
+        <div className='absolute inset-0 bg-grid-pattern opacity-5' />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className='relative z-10 text-center space-y-8 max-w-4xl mx-auto px-4'
+        >
+          <h1 className='text-5xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary animate-text tracking-tight'>
             探索思维的边界
           </h1>
-          <p className='text-xl text-muted-foreground'>
+          <p className='text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto'>
             在这里，我们一起探讨技术、哲学与生活的交织
           </p>
-          <div className='flex gap-4 justify-center'>
-            <Link
-              href='/blog'
-              className='px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors'
-            >
-              开始阅读
-            </Link>
-            <Link
-              href='/about'
-              className='px-6 py-3 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 transition-colors'
-            >
-              了解更多
-            </Link>
+          <div className='flex gap-6 justify-center'>
+            <Button size='lg' asChild>
+              <Link href='/blog' className='text-lg'>
+                开始阅读
+                <ArrowRight className='ml-2 h-5 w-5' />
+              </Link>
+            </Button>
+            <Button size='lg' variant='outline' asChild>
+              <Link href='/about' className='text-lg'>
+                了解更多
+              </Link>
+            </Button>
           </div>
-        </div>
+        </motion.div>
       </section>
 
-      {/* Latest Posts Section */}
-      <section className='container py-16'>
-        <h2 className='text-3xl font-bold text-center mb-12'>最新文章</h2>
-        <div className='grid gap-8 md:grid-cols-2 lg:grid-cols-3'>
-          {latestPosts.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
-        </div>
-        {latestPosts.length > 0 && (
-          <div className='text-center mt-12'>
-            <Link
-              href='/blog'
-              className='inline-flex items-center text-primary hover:text-primary/90 transition-colors'
-            >
-              浏览更多文章
-              <svg className='ml-2 h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                <path
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  strokeWidth={2}
-                  d='M9 5l7 7-7 7'
-                />
-              </svg>
-            </Link>
+      {/* Featured Posts Section */}
+      <section className='container py-20 space-y-16'>
+        {/* 精选文章 */}
+        <div className='space-y-8'>
+          <div className='flex items-center justify-between'>
+            <h2 className='text-3xl font-bold'>精选文章</h2>
+            <Button variant='ghost' asChild>
+              <Link href='/blog' className='group'>
+                查看全部
+                <ArrowRight className='ml-2 h-4 w-4 transition-transform group-hover:translate-x-1' />
+              </Link>
+            </Button>
           </div>
-        )}
+          <div className='grid gap-8 md:grid-cols-3'>
+            {featuredPosts?.map((post) => (
+              <motion.div
+                key={post.id}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                viewport={{ once: true }}
+              >
+                <PostCard post={post} featured />
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {/* 最新文章 */}
+        <div className='space-y-8'>
+          <div className='flex items-center justify-between'>
+            <h2 className='text-3xl font-bold'>最新发布</h2>
+          </div>
+          <div className='grid gap-6 md:grid-cols-3'>
+            {recentPosts?.map((post) => (
+              <motion.div
+                key={post.id}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                viewport={{ once: true }}
+              >
+                <PostCard post={post} />
+              </motion.div>
+            ))}
+          </div>
+        </div>
       </section>
     </div>
   )

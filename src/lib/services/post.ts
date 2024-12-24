@@ -1,5 +1,5 @@
 import { BaseService } from './base'
-import type { Post, Tag } from '@/types'
+import type { Post, Tag, PostStatus } from '@/types'
 
 interface CreatePostData extends Partial<Post> {
   tags?: string[] // 标签的 slug 数组
@@ -12,12 +12,12 @@ class PostService extends BaseService {
       const { error: tagError } = await this.supabase
         .from('post_tags')
         .delete()
-        .not('post_id', 'is', null) // 删除所有非空记录
+        .not('post_id', 'is', null)
 
       if (tagError) throw tagError
 
       // 再删除文章
-      const { error: postError } = await this.supabase.from('posts').delete().not('id', 'is', null) // 删除所有非空记录
+      const { error: postError } = await this.supabase.from('posts').delete().not('id', 'is', null)
 
       if (postError) throw postError
 
@@ -44,7 +44,6 @@ class PostService extends BaseService {
 
       // 2. 如果有标签，创建关联
       if (tagSlugs?.length) {
-        // 获取标签 ID
         const { data: tags, error: tagError } = await this.supabase
           .from('tags')
           .select('id, slug')
@@ -52,7 +51,6 @@ class PostService extends BaseService {
 
         if (tagError) throw tagError
 
-        // 创建文章-标签关联
         const tagRelations = tags.map((tag) => ({
           post_id: createdPost.id,
           tag_id: tag.id,
@@ -70,14 +68,83 @@ class PostService extends BaseService {
   async createMany(posts: CreatePostData[]) {
     return this.transaction(async () => {
       const createdPosts = []
-
       for (const post of posts) {
         const createdPost = await this.create(post)
         createdPosts.push(createdPost)
       }
-
       return createdPosts
     }, '批量创建文章')
+  }
+
+  async getPosts({
+    status,
+    limit,
+    orderBy,
+  }: {
+    status?: PostStatus
+    limit?: number
+    orderBy?: Record<string, 'asc' | 'desc'>
+  } = {}) {
+    try {
+      let query = this.supabase.from('posts').select(`
+        *,
+        author:users(id, email),
+        tags:post_tags(tag:tag_id(*))
+      `)
+
+      if (status) {
+        query = query.eq('status', status)
+      }
+
+      if (limit) {
+        query = query.limit(limit)
+      }
+
+      if (orderBy) {
+        Object.entries(orderBy).forEach(([column, order]) => {
+          query = query.order(column, { ascending: order === 'asc' })
+        })
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+
+      return data
+    } catch (error) {
+      console.error('PostService.getPosts error:', error)
+      throw error instanceof Error ? error : new Error('获取文章列表时发生未知错误')
+    }
+  }
+
+  async getPostBySlug(slug: string) {
+    try {
+      const { data, error } = await this.supabase
+        .from('posts')
+        .select(
+          `
+          *,
+          author:users(id, email),
+          tags:post_tags(tag:tags(*))
+        `
+        )
+        .eq('slug', slug)
+        .single()
+
+      if (error) throw error
+      if (!data) throw new Error('文章不存在')
+
+      // 格式化日期
+      return {
+        ...data,
+        created_at: new Date(data.created_at).toISOString(),
+        updated_at: new Date(data.updated_at).toISOString(),
+        published_at: data.published_at ? new Date(data.published_at).toISOString() : null,
+      }
+    } catch (error) {
+      console.error('PostService.getPostBySlug error:', error)
+      throw error instanceof Error ? error : new Error('获取文章详情时发生未知错误')
+    }
   }
 }
 

@@ -1,11 +1,33 @@
+'use client'
+
 import Link from 'next/link'
 import type { Post } from '@/types'
+import { usePosts } from '@/hooks/usePosts'
 
 interface PostCardProps {
   post: Post
 }
 
 export function PostCard({ post }: PostCardProps) {
+  const { invalidatePosts } = usePosts()
+
+  const handleLike = async () => {
+    try {
+      const response = await fetch(`/api/posts/${post.slug}/like`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to like post')
+      }
+
+      // 触发文章列表重新获取
+      invalidatePosts()
+    } catch (error) {
+      console.error('Error liking post:', error)
+    }
+  }
+
   return (
     <Link href={`/blog/${post.slug}`} className='block group'>
       <article className='bg-card rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow'>

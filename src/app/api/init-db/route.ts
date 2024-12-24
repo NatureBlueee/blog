@@ -1,16 +1,27 @@
 import { NextResponse } from 'next/server'
 import { postService } from '@/lib/services/post'
 import { tagService } from '@/lib/services/tag'
+import { supabase } from '@/lib/supabase/client'
 
 export async function POST() {
   try {
     console.log('开始初始化数据库...')
 
-    // 1. 清理现有数据
-    await postService.deleteAll() // 这会同时清理 post_tags
-    await tagService.deleteAll()
+    // 1. 强制清理所有数据
+    const { error: deleteError } = await supabase.rpc('initialize_database')
+    if (deleteError) {
+      console.error('初始化数据库失败:', deleteError)
+      throw deleteError
+    }
 
-    // 2. 创建基础标签
+    // 2. 验证清理结果
+    const { data: afterPosts, error: afterError } = await supabase
+      .from('posts')
+      .select('id, title, slug')
+
+    console.log('清理后的文章:', afterPosts)
+
+    // 3. 创建基础标签
     const tags = await tagService.createMany([
       { name: '前端开发', slug: 'frontend' },
       { name: '后端开发', slug: 'backend' },
@@ -18,32 +29,19 @@ export async function POST() {
       { name: '全栈开发', slug: 'fullstack' },
     ])
 
-    // 3. 创建初始文章
-    const posts = await postService.createMany([
-      {
-        title: '全栈应用开发指南',
-        slug: 'fullstack-development-guide',
-        content: `# 全栈应用开发指南\n\n...`,
-        excerpt: '探索全栈开发的最佳实践和技术选型',
-        status: 'published',
-      },
-    ])
+    // 不再创建初始文章，让用户通过"创建测试数据"功能来添加文章
 
-    console.log('初始化完成!')
     return NextResponse.json({
       success: true,
       data: {
         tags: tags?.length || 0,
-        posts: posts?.length || 0,
+        posts: 0,
       },
     })
   } catch (error) {
     console.error('初始化失败:', error)
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : '初始化失败',
-        details: error,
-      },
+      { error: error instanceof Error ? error.message : '初始化失败' },
       { status: 500 }
     )
   }
