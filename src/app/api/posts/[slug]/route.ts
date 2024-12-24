@@ -4,12 +4,10 @@ import { postService } from '@/lib/services/posts'
 export async function GET(request: Request, { params }: { params: { slug: string } }) {
   try {
     const post = await postService.getPostBySlug(params.slug)
-
     if (!post) {
       return NextResponse.json({ error: '文章不存在' }, { status: 404 })
     }
-
-    return NextResponse.json(post)
+    return NextResponse.json({ data: post })
   } catch (error) {
     console.error('获取文章失败:', error)
     return NextResponse.json(

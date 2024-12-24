@@ -7,8 +7,12 @@ import { Toaster } from '@/components/ui/toaster'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: '我的博客',
-  description: '分享技术见解和开发经验',
+  title: {
+    template: '%s | My Blog',
+    default: 'My Blog',
+  },
+  description: '分享技术与思考',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

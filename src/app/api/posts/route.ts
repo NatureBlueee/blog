@@ -1,22 +1,14 @@
 import { NextResponse } from 'next/server'
-import { PostService } from '@/lib/services/posts'
+import { postService } from '@/lib/services/posts'
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status') as 'published' | 'draft' | null
-
-    const postService = new PostService()
-    const posts = await postService.getAllPosts({ status })
-
-    return NextResponse.json(posts)
+    const posts = await postService.getPosts({ status: 'published' })
+    return NextResponse.json({ data: posts })
   } catch (error) {
-    console.error('API Error:', error)
+    console.error('Failed to fetch posts:', error)
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : '获取文章列表失败',
-        details: error instanceof Error ? error.stack : undefined,
-      },
+      { error: error instanceof Error ? error.message : '获取文章失败' },
       { status: 500 }
     )
   }

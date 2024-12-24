@@ -1,63 +1,30 @@
 import Link from 'next/link'
-import Image from 'next/image'
-import { formatDate } from '@/lib/utils'
+import type { Post } from '@/types'
 
 interface PostCardProps {
-  post: {
-    slug: string
-    title: string
-    excerpt: string
-    created_at: string
-    author?: {
-      name: string
-      avatar: string
-    }
-    category?: string
-    tags?: string[]
-  }
+  post: Post
 }
 
 export function PostCard({ post }: PostCardProps) {
   return (
-    <Link
-      href={`/blog/${post.slug}`}
-      className='group block overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-all hover:shadow-md dark:border-gray-800 dark:bg-gray-900'
-    >
-      <div className='p-6'>
-        {post.category && (
-          <span className='inline-block rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-100'>
-            {post.category}
-          </span>
-        )}
-
-        <h2 className='mt-4 text-xl font-semibold text-gray-900 group-hover:text-primary dark:text-gray-100'>
-          {post.title}
-        </h2>
-
-        <p className='mt-3 text-gray-600 line-clamp-3 dark:text-gray-300'>{post.excerpt}</p>
-
-        <div className='mt-6 flex items-center gap-4'>
-          {post.author?.avatar && (
-            <Image
-              src={post.author.avatar}
-              alt={post.author.name}
-              width={40}
-              height={40}
-              className='rounded-full'
-            />
-          )}
-          <div>
-            {post.author?.name && (
-              <p className='text-sm font-medium text-gray-900 dark:text-gray-100'>
-                {post.author.name}
-              </p>
-            )}
-            <p className='text-sm text-gray-500 dark:text-gray-400'>
-              {formatDate(post.created_at)}
-            </p>
+    <Link href={`/blog/${post.slug}`} className='block group'>
+      <article className='bg-card rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow'>
+        <div className='p-6'>
+          <h2 className='text-2xl font-bold mb-2 group-hover:text-primary transition-colors'>
+            {post.title}
+          </h2>
+          <p className='text-muted-foreground mb-4'>
+            {post.excerpt || post.content.substring(0, 150)}...
+          </p>
+          <div className='flex justify-between items-center text-sm text-muted-foreground'>
+            <span>{new Date(post.created_at).toLocaleDateString()}</span>
+            <div className='flex items-center gap-4'>
+              <span>{post.views || 0} 次阅读</span>
+              <span>{post.likes || 0} 喜欢</span>
+            </div>
           </div>
         </div>
-      </div>
+      </article>
     </Link>
   )
 }

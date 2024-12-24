@@ -1,55 +1,48 @@
+import { BlogList } from '@/components/blog/BlogList'
 import { postService } from '@/lib/services/posts'
+import { tagService } from '@/lib/services/tags'
 
 export default async function BlogPage() {
   try {
-    // 1. 获取已发布的文章
-    const posts = (await postService.getPosts({ status: 'published' })) || []
+    const [posts, tags] = await Promise.all([
+      postService.getPosts({ status: 'published' }),
+      tagService.getTags(),
+    ])
 
-    // 2. 确保 posts 是一个数组
     if (!Array.isArray(posts)) {
       console.error('Posts data is not an array:', posts)
-      return <div>加载文章失败</div>
-    }
-
-    // 3. 如果没有文章，显示空状态
-    if (posts.length === 0) {
       return (
-        <div className='text-center py-10'>
-          <p className='text-gray-500'>暂无文章</p>
+        <div className='container mx-auto px-4 py-8'>
+          <div className='bg-red-50 border border-red-200 rounded-lg p-4'>
+            <h2 className='text-red-800 font-semibold mb-2'>加载文章失败</h2>
+            <p className='text-red-600'>错误：数据格式不正确</p>
+            <p className='text-red-500 text-sm mt-2'>收到的数据：{JSON.stringify(posts)}</p>
+          </div>
         </div>
       )
     }
 
-    // 4. 渲染文章列表
     return (
       <div className='container mx-auto px-4 py-8'>
-        <div className='grid gap-6 md:grid-cols-2 lg:grid-cols-3'>
-          {posts.map((post) => (
-            <article
-              key={post.id}
-              className='bg-card rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow'
-            >
-              <div className='p-6'>
-                <h2 className='text-2xl font-bold mb-2'>
-                  <a href={`/blog/${post.slug}`} className='hover:text-primary'>
-                    {post.title}
-                  </a>
-                </h2>
-                <p className='text-muted-foreground mb-4'>
-                  {post.excerpt || post.content.substring(0, 150)}...
-                </p>
-                <div className='flex justify-between items-center text-sm text-muted-foreground'>
-                  <span>{new Date(post.created_at).toLocaleDateString()}</span>
-                  <span>{post.views} 次阅读</span>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
+        <BlogList initialPosts={posts} tags={tags || []} />
       </div>
     )
   } catch (error) {
     console.error('Failed to load blog posts:', error)
-    return <div>加载文章失败</div>
+    return (
+      <div className='container mx-auto px-4 py-8'>
+        <div className='bg-red-50 border border-red-200 rounded-lg p-4'>
+          <h2 className='text-red-800 font-semibold mb-2'>加载文章失败</h2>
+          <p className='text-red-600'>
+            错误：{error instanceof Error ? error.message : String(error)}
+          </p>
+          {process.env.NODE_ENV === 'development' && (
+            <pre className='mt-4 p-2 bg-red-100 rounded text-sm overflow-auto'>
+              {JSON.stringify(error, null, 2)}
+            </pre>
+          )}
+        </div>
+      </div>
+    )
   }
 }
