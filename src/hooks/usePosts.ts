@@ -1,38 +1,23 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+'use client'
+
+import { useQuery } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import type { BlogPost } from '@/types'
 
-const POSTS_QUERY_KEY = ['posts']
-
-export function usePosts() {
-  const queryClient = useQueryClient()
-
-  const {
-    data: posts,
-    isLoading,
-    error,
-  } = useQuery({
-    queryKey: POSTS_QUERY_KEY,
+export function usePosts(includeAll = false) {
+  return useQuery<BlogPost[]>({
+    queryKey: ['posts', includeAll],
     queryFn: async () => {
-      const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https'
-      const host = window.location.host
-      const baseUrl = `${protocol}://${host}`
-      const response = await fetch(`${baseUrl}/api/posts`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch posts')
-      }
-      const data = await response.json()
-      return data.data
+      const res = await fetch(`/api/posts${includeAll ? '/all' : ''}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
+      })
+      if (!res.ok) throw new Error('获取文章列表失败')
+      const { data } = await res.json()
+      return includeAll ? data : data.filter((post) => post.status === 'published')
     },
+    staleTime: includeAll ? 0 : 1000 * 60, // 管理后台不缓存，前台缓存1分钟
   })
-
-  const invalidatePosts = () => {
-    queryClient.invalidateQueries({ queryKey: POSTS_QUERY_KEY })
-  }
-
-  return {
-    posts,
-    isLoading,
-    error,
-    invalidatePosts,
-  }
 }

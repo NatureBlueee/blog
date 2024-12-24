@@ -5,42 +5,38 @@ import { ErrorComponent } from '@/components/ui/error'
 export default async function BlogPage() {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
-    console.log('BlogPage: Fetching from URL:', `${baseUrl}/api/posts`)
 
     const res = await fetch(`${baseUrl}/api/posts`, {
       next: { revalidate: 60 },
       headers: {
         'Content-Type': 'application/json',
+        'X-List-Type': 'published-only',
       },
     })
-
-    console.log('BlogPage: Response status:', res.status)
 
     if (!res.ok) {
       throw new Error(`获取文章失败: ${res.statusText}`)
     }
 
     const { data: posts } = await res.json()
-    console.log('BlogPage: Posts received:', posts?.length)
 
-    if (!posts?.length) {
+    const publishedPosts = posts?.filter((post) => post.status === 'published')
+
+    if (!publishedPosts?.length) {
       return (
         <div className='container mx-auto px-4 py-8'>
-          <p className='text-gray-600'>暂无文章</p>
+          <p className='text-gray-600'>暂无已发布的文章</p>
         </div>
       )
     }
 
     return (
       <div className='container mx-auto px-4 py-8'>
-        <BlogList posts={posts} />
+        <BlogList posts={publishedPosts} />
       </div>
     )
   } catch (error) {
-    console.error('BlogPage: Error details:', {
-      message: error instanceof Error ? error.message : '未知错误',
-      stack: error instanceof Error ? error.stack : undefined,
-    })
+    console.error('BlogPage: Error details:', error)
     return <ErrorComponent error={handleError(error)} />
   }
 }

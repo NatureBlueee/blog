@@ -1,14 +1,32 @@
 import { NextResponse } from 'next/server'
-import { postService } from '@/lib/services/post'
+import { supabase } from '@/lib/supabase/client'
 
 export async function GET() {
   try {
-    console.log('API Route: Fetching posts...')
-    const posts = await postService.getPosts({ status: 'published' })
-    console.log('API Route: Posts fetched:', posts?.length)
-    return NextResponse.json({ data: posts })
+    const { data, error } = await supabase
+      .from('posts')
+      .select(
+        `
+        id,
+        title,
+        slug,
+        excerpt,
+        status,
+        created_at,
+        published_at,
+        view_count,
+        likes
+      `
+      )
+      .eq('status', 'published')
+      .is('deleted_at', null)
+      .order('published_at', { ascending: false })
+
+    if (error) throw error
+
+    return NextResponse.json({ data })
   } catch (error) {
-    console.error('API Route: Failed to fetch posts:', error)
+    console.error('获取已发布文章失败:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '获取文章失败' },
       { status: 500 }

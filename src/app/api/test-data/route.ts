@@ -83,18 +83,18 @@ export async function POST() {
     for (const post of testPosts) {
       const { tags: postTags, ...postData } = post
 
-      // 添加时间戳到 slug 以确保唯一性
-      const uniqueSlug = `${postData.slug}-${Date.now()}`
+      // 使用预定义的状态
+      const published_at = postData.status === 'published' ? new Date().toISOString() : null
 
       // 创建文章
       const { data: createdPost, error: postError } = await supabase
         .from('posts')
         .upsert({
           ...postData,
-          slug: uniqueSlug,
+          slug: `${postData.slug}-${Date.now()}`,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          status: 'published',
+          published_at,
         })
         .select()
         .single()

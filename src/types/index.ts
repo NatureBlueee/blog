@@ -98,7 +98,7 @@ export interface TableOfContentsProps {
   items: TableOfContentsItem[]
 }
 
-export type PostStatus = 'draft' | 'published' | 'archived'
+export type PostStatus = 'published' | 'draft'
 
 export interface PostVersion {
   id: string
@@ -118,14 +118,18 @@ export interface BlogPost {
   id: string
   title: string
   slug: string
-  content: string
+  content: string | null
+  excerpt: string | null
   status: PostStatus
-  createdAt: string
-  updatedAt: string
-  publishedAt?: string
+  author_id: string | null
   views: number
-  author?: Author
-  tags: Tag[]
+  metadata: Record<string, any>
+  created_at: string
+  updated_at: string
+  published_at: string | null
+  deleted_at: string | null
+  likes: number
+  view_count: number
 }
 
 export interface EditorBaseProps {

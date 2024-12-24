@@ -1,11 +1,18 @@
 import { BaseService } from './base'
 import type { Post, Tag, PostStatus } from '@/types'
+import { SupabaseClient } from '@supabase/supabase-js'
 
 interface CreatePostData extends Partial<Post> {
   tags?: string[] // 标签的 slug 数组
 }
 
-class PostService extends BaseService {
+export class PostService {
+  private supabase: SupabaseClient
+
+  constructor() {
+    this.supabase = supabase
+  }
+
   async deleteAll() {
     return this.transaction(async () => {
       // 先删除关联数据
@@ -79,31 +86,38 @@ class PostService extends BaseService {
   async getPosts({
     status,
     limit,
+    includeAll = false,
     orderBy,
   }: {
     status?: PostStatus
     limit?: number
+    includeAll?: boolean
     orderBy?: Record<string, 'asc' | 'desc'>
   } = {}) {
     try {
-      let query = this.supabase.from('posts').select(`
-        *,
-        author:users(id, email),
-        tags:post_tags(tag:tag_id(*))
-      `)
+      let query = this.supabase
+        .from('posts')
+        .select(
+          `
+          *,
+          author:users(id, email),
+          tags:post_tags(tag:tag_id(*))
+        `
+        )
+        .is('deleted_at', null)
+
+      // 前台只显示已发布文章
+      if (!includeAll) {
+        query = query.eq('status', 'published')
+      }
 
       if (status) {
         query = query.eq('status', status)
       }
 
-      if (limit) {
-        query = query.limit(limit)
-      }
-
-      if (orderBy) {
-        Object.entries(orderBy).forEach(([column, order]) => {
-          query = query.order(column, { ascending: order === 'asc' })
-        })
+      // 默认按发布时间排序
+      if (!orderBy) {
+        query = query.order('published_at', { ascending: false })
       }
 
       const { data, error } = await query
@@ -117,30 +131,45 @@ class PostService extends BaseService {
     }
   }
 
-  async getPostBySlug(slug: string) {
+  async getPostBySlug(slug: string, includeAll = false) {
     try {
-      const { data, error } = await this.supabase
+      let query = this.supabase
         .from('posts')
         .select(
           `
           *,
           author:users(id, email),
-          tags:post_tags(tag:tags(*))
+          tags:post_tags(tag:tag_id(*))
         `
         )
         .eq('slug', slug)
+        .is('deleted_at', null)
         .single()
 
-      if (error) throw error
-      if (!data) throw new Error('文章不存在')
+      if (!includeAll) {
+        query = query.eq('status', 'published')
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          throw new Error('文章不存在或未发布')
+        }
+        throw error
+      }
 
       // 格式化日期
-      return {
-        ...data,
-        created_at: new Date(data.created_at).toISOString(),
-        updated_at: new Date(data.updated_at).toISOString(),
-        published_at: data.published_at ? new Date(data.published_at).toISOString() : null,
+      if (data) {
+        return {
+          ...data,
+          created_at: new Date(data.created_at).toISOString(),
+          updated_at: new Date(data.updated_at).toISOString(),
+          published_at: data.published_at ? new Date(data.published_at).toISOString() : null,
+        }
       }
+
+      return null
     } catch (error) {
       console.error('PostService.getPostBySlug error:', error)
       throw error instanceof Error ? error : new Error('获取文章详情时发生未知错误')
