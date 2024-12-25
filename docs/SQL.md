@@ -530,7 +530,7 @@ CREATE INDEX idx_post_views_created_at ON post_views(created_at);
 
 ### 主要变更说明
 1. media 表结构更简化，移除了 metadata 字段，添加了具体的媒体属性
-2. settings 表使用更��单的结构，移除了 description 字段
+2. settings 表使用更��单的结构，移除��� description 字段
 3. post_views 表添加了 referer 字段，移除了 viewer_id 字段
 
 ### 使用建议
@@ -1097,7 +1097,7 @@ ORDER BY ss.avg_duration DESC;
 
 #### 3. 数据收集要点
 
-1. **内���区块标记**
+1. **������区块标记**
    - 为文章内容添加 section_id
    - 标记不同的内容类型（text/image/code）
    - 记录区块在页面中的位置
@@ -2604,3 +2604,371 @@ interface RecommendationConfig {
 3. 开发配置预览功能
 4. 添加A/B测试支持
 5. 实现配置版本控制
+```
+
+### 推荐系统配置管理
+
+#### 1. 数据库表设计
+
+```sql
+-- 推荐配置方案表
+CREATE TABLE IF NOT EXISTS recommendation_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    author_id UUID NOT NULL REFERENCES users(id),
+    is_active BOOLEAN DEFAULT false,
+    config JSONB NOT NULL,
+    metrics JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 配置效果追踪表
+CREATE TABLE IF NOT EXISTS recommendation_metrics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    profile_id UUID NOT NULL REFERENCES recommendation_profiles(id),
+    date DATE NOT NULL,
+    impressions INTEGER DEFAULT 0,
+    clicks INTEGER DEFAULT 0,
+    avg_engagement_time FLOAT,
+    metrics JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### 2. 基础管理函数
+
+```sql
+-- 获取当前活跃配置
+CREATE OR REPLACE FUNCTION get_active_recommendation_profile(p_author_id UUID)
+RETURNS TABLE (
+    id UUID,
+    name VARCHAR,
+    config JSONB,
+    metrics JSONB
+);
+
+-- 切换活跃配置
+CREATE OR REPLACE FUNCTION switch_recommendation_profile(
+    p_author_id UUID,
+    p_profile_id UUID
+) RETURNS BOOLEAN;
+
+-- 验证配置
+CREATE OR REPLACE FUNCTION validate_recommendation_config(
+    p_config JSONB
+) RETURNS TABLE (
+    is_valid BOOLEAN,
+    issues JSONB,
+    suggestions JSONB
+);
+```
+
+#### 3. 推荐API接口
+
+```typescript
+// 配置管理接口
+interface RecommendationConfig {
+    id: string;
+    name: string;
+    description?: string;
+    config: {
+        similarity_weights: {
+            tag_based: number;
+            behavior_based: number;
+        };
+        engagement_weights: {
+            views: number;
+            likes: number;
+            shares: number;
+            unique_viewers: number;
+            read_time: number;
+            scroll_depth: number;
+        };
+        time_decay_factor: number;
+        completion_bonus_factor: number;
+        interest_match_factor: number;
+    };
+    metrics?: any;
+}
+
+// API 端点
+interface RecommendationAPI {
+    // 获取配置列表
+    getConfigs(): Promise<RecommendationConfig[]>;
+    
+    // 获取当前活跃配置
+    getActiveConfig(): Promise<RecommendationConfig>;
+    
+    // 创建新配置
+    createConfig(config: Partial<RecommendationConfig>): Promise<RecommendationConfig>;
+    
+    // 更新配置
+    updateConfig(id: string, config: Partial<RecommendationConfig>): Promise<RecommendationConfig>;
+    
+    // 切换活跃配置
+    activateConfig(id: string): Promise<boolean>;
+    
+    // 获取配置效果统计
+    getConfigMetrics(id: string): Promise<any>;
+}
+```
+
+#### 4. 使用示例
+
+```typescript
+// 前端示例
+async function setupRecommendationConfig() {
+    // 获取当前配置
+    const activeConfig = await api.getActiveConfig();
+    
+    // 更新配置
+    const updatedConfig = await api.updateConfig(activeConfig.id, {
+        config: {
+            ...activeConfig.config,
+            similarity_weights: {
+                tag_based: 0.7,
+                behavior_based: 0.3
+            }
+        }
+    });
+    
+    // 查看效果统计
+    const metrics = await api.getConfigMetrics(activeConfig.id);
+    console.log('Configuration performance:', metrics);
+}
+```
+
+# 文章管理 SQL
+
+## 数据库表结构
+
+### 1. 核心表
+```sql
+-- 文章主表
+CREATE TABLE posts (
+    id uuid PRIMARY KEY,
+    title varchar NOT NULL,
+    slug varchar NOT NULL UNIQUE,
+    content text,
+    excerpt text,
+    status varchar,
+    author_id uuid REFERENCES auth.users(id),
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    published_at timestamptz,
+    deleted_at timestamptz,
+    latest_draft_id uuid,
+    latest_draft_updated_at timestamptz,
+    draft_count integer DEFAULT 0,
+    metadata jsonb DEFAULT '{}'::jsonb
+);
+
+-- 文章版本表
+CREATE TABLE post_versions (
+    id uuid PRIMARY KEY,
+    post_id uuid REFERENCES posts(id),
+    content text NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb,
+    version_type varchar,
+    description text,
+    created_at timestamptz DEFAULT now()
+);
+
+-- 草稿版本表
+CREATE TABLE post_draft_versions (
+    id uuid PRIMARY KEY,
+    post_id uuid REFERENCES posts(id),
+    version_number integer NOT NULL,
+    title text,
+    content text,
+    excerpt text,
+    metadata jsonb DEFAULT '{}'::jsonb,
+    created_at timestamptz DEFAULT now(),
+    created_by uuid REFERENCES auth.users(id),
+    is_auto_save boolean DEFAULT false,
+    save_type varchar DEFAULT 'manual',
+    UNIQUE(post_id, version_number)
+);
+```
+
+### 2. 状态管理表
+```sql
+-- 状态配置表
+CREATE TABLE post_status_config (
+    id uuid PRIMARY KEY,
+    status_key varchar NOT NULL UNIQUE,
+    status_name text NOT NULL,
+    description text,
+    color varchar,
+    icon varchar,
+    is_system boolean DEFAULT false,
+    next_states text[],
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+-- 状态历史表
+CREATE TABLE post_status_history (
+    id uuid PRIMARY KEY,
+    post_id uuid REFERENCES posts(id),
+    from_status varchar,
+    to_status varchar NOT NULL,
+    reason text,
+    changed_by uuid REFERENCES auth.users(id),
+    changed_at timestamptz DEFAULT now()
+);
+
+-- 状态变更原因表
+CREATE TABLE post_status_change_reasons (
+    id uuid PRIMARY KEY,
+    from_status varchar NOT NULL,
+    to_status varchar NOT NULL,
+    reason_key varchar NOT NULL,
+    reason_text text NOT NULL,
+    is_system boolean DEFAULT false,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    UNIQUE(from_status, to_status, reason_key)
+);
+```
+
+### 3. 分类和标签
+```sql
+-- 文章分类关联表
+CREATE TABLE post_categories (
+    post_id uuid NOT NULL REFERENCES posts(id),
+    category_id uuid NOT NULL REFERENCES categories(id),
+    PRIMARY KEY (post_id, category_id)
+);
+
+-- 文章标签关联表
+CREATE TABLE post_tags (
+    id uuid PRIMARY KEY,
+    post_id uuid REFERENCES posts(id),
+    tag_id uuid REFERENCES tags(id),
+    created_at timestamptz DEFAULT now(),
+    UNIQUE(post_id, tag_id)
+);
+```
+
+### 4. 互动功能表
+```sql
+-- 书签表
+CREATE TABLE post_bookmarks (
+    id uuid PRIMARY KEY,
+    post_id uuid REFERENCES posts(id),
+    viewer_ip varchar,
+    folder_name text,
+    note text,
+    created_at timestamptz DEFAULT now(),
+    UNIQUE(post_id, viewer_ip, folder_name)
+);
+
+-- 点赞表
+CREATE TABLE post_likes (
+    id uuid PRIMARY KEY,
+    post_id uuid REFERENCES posts(id),
+    viewer_ip varchar,
+    created_at timestamptz DEFAULT now(),
+    UNIQUE(post_id, viewer_ip)
+);
+
+-- 分享表
+CREATE TABLE post_shares (
+    id uuid PRIMARY KEY,
+    post_id uuid REFERENCES posts(id),
+    viewer_ip varchar,
+    share_platform varchar,
+    share_url text,
+    created_at timestamptz DEFAULT now(),
+    share_date date,
+    UNIQUE(post_id, viewer_ip, share_platform, share_date)
+);
+
+-- 浏览表
+CREATE TABLE post_views (
+    id uuid PRIMARY KEY,
+    post_id uuid REFERENCES posts(id),
+    viewer_ip varchar,
+    user_agent text,
+    referer text,
+    created_at timestamptz DEFAULT now()
+);
+```
+
+### 5. 推荐系统表
+```sql
+-- 相似度表
+CREATE TABLE post_similarities (
+    id uuid PRIMARY KEY,
+    post_id uuid REFERENCES posts(id),
+    similar_post_id uuid REFERENCES posts(id),
+    similarity_score numeric,
+    similarity_type varchar,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    UNIQUE(post_id, similar_post_id, similarity_type)
+);
+
+-- 推荐表
+CREATE TABLE post_recommendations (
+    id uuid PRIMARY KEY,
+    post_id uuid REFERENCES posts(id),
+    recommended_post_id uuid REFERENCES posts(id),
+    viewer_ip varchar,
+    recommendation_type varchar,
+    is_clicked boolean DEFAULT false,
+    created_at timestamptz DEFAULT now(),
+    clicked_at timestamptz,
+    FOREIGN KEY (recommended_post_id) REFERENCES posts(id)
+);
+```
+
+## 索引优化
+
+### 1. 核心表索引
+```sql
+-- 文章表索引
+CREATE INDEX idx_posts_status ON posts(status);
+CREATE INDEX idx_posts_author ON posts(author_id);
+CREATE INDEX idx_posts_created_at ON posts(created_at);
+CREATE INDEX idx_posts_published_at ON posts(published_at);
+
+-- 版本表索引
+CREATE INDEX idx_post_versions_post_id ON post_versions(post_id);
+CREATE INDEX idx_post_draft_versions_post_id ON post_draft_versions(post_id);
+```
+
+### 2. 互动查询优化
+```sql
+-- 浏览记录优化
+CREATE INDEX idx_post_views_post_id_created_at ON post_views(post_id, created_at);
+CREATE INDEX idx_post_views_viewer_ip ON post_views(viewer_ip);
+
+-- 点赞优化
+CREATE INDEX idx_post_likes_post_id_created_at ON post_likes(post_id, created_at);
+CREATE INDEX idx_post_likes_viewer_ip ON post_likes(viewer_ip);
+
+-- 分享优化
+CREATE INDEX idx_post_shares_post_id_platform ON post_shares(post_id, share_platform);
+CREATE INDEX idx_post_shares_created_at ON post_shares(created_at);
+
+-- 收藏优化
+CREATE INDEX idx_post_bookmarks_folder ON post_bookmarks(folder_name);
+CREATE INDEX idx_post_bookmarks_viewer_ip ON post_bookmarks(viewer_ip);
+```
+
+### 3. 推荐系统优化
+```sql
+-- 相似度查询优化
+CREATE INDEX idx_post_similarities_scores ON post_similarities(post_id, similarity_score DESC);
+CREATE INDEX idx_post_similarities_type ON post_similarities(similarity_type);
+
+-- 推荐查询优化
+CREATE INDEX idx_post_recommendations_type ON post_recommendations(recommendation_type, created_at);
+CREATE INDEX idx_post_recommendations_viewer ON post_recommendations(viewer_ip);
+```
+
+[原有的函数定义和注意事项保持不变...]
