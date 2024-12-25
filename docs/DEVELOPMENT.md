@@ -499,3 +499,147 @@ export class DatabaseError extends Error {
   }
 }
 ```
+# 文章管理系统开发文档
+
+## 系统架构
+
+### 1. 数据层
+- PostgreSQL 数据库
+- 使用 UUID 作为主键
+- JSONB 支持元数据扩展
+- 事务保证数据一致性
+
+### 2. 核心模块
+```mermaid
+graph TD
+    A[文章管理] --> B[状态管理]
+    A --> C[草稿管理]
+    A --> D[版本控制]
+    B --> E[状态配置]
+    B --> F[状态历史]
+    C --> G[自动保存]
+    C --> H[版本追踪]
+```
+
+### 3. 关键设计决策
+
+#### 状态管理
+- 使用配置表管理状态流转
+- 记录完整变更历史
+- 状态历史可能出现重复记录（设计决策）
+  > 使用视图处理重复记录，避免修改现有代码
+
+#### 草稿系统
+- 支持多版本管理
+- 自动保存机制
+- 版本号自增设计
+
+## 开发指南
+
+### 1. 环境设置
+```bash
+# 数据库初始化
+psql -f scripts/init.sql
+
+# 配置初始化
+psql -f scripts/init_config.sql
+```
+
+### 2. 代码规范
+
+#### SQL 规范
+- 使用大写 SQL 关键字
+- 使用下划线命名法
+- 添加适当的注释
+- 使用参数化查询
+
+#### API 规范
+- RESTful 设计
+- 使用 TypeScript 类型
+- 统一错误处理
+- 版本控制
+
+### 3. 测试策略
+
+#### 单元测试
+```sql
+-- 状态变更测试
+SELECT test_post_workflow();
+
+-- 草稿管理测试
+SELECT test_draft_management();
+```
+
+#### 集成测试
+```typescript
+describe('Article Management', () => {
+  it('should handle status changes correctly', async () => {
+    // 测试代码
+  });
+  
+  it('should manage drafts properly', async () => {
+    // 测试代码
+  });
+});
+```
+
+## 常见问题
+
+### 1. 状态变更问题
+- Q: 为什么会有重复的状态历史记录？
+- A: 这是由于函数和触发器的双重记录机制导致，通过视图可以解决。
+
+### 2. 性能优化
+- 使用适当的索引
+- 避免长事务
+- 定期清理历史数据
+
+## 维护指南
+
+### 1. 监控指标
+```sql
+-- 检查状态变更频率
+SELECT 
+    to_status,
+    COUNT(*),
+    AVG(EXTRACT(EPOCH FROM (changed_at - lag(changed_at) OVER (PARTITION BY post_id ORDER BY changed_at))))::integer as avg_time_in_status
+FROM post_status_history_view
+GROUP BY to_status;
+
+-- 检查草稿版本数量
+SELECT 
+    COUNT(*) as version_count,
+    AVG(version_number) as avg_versions
+FROM post_draft_versions;
+```
+
+### 2. 定期维护
+```sql
+-- 清理过期的自动保存草稿
+DELETE FROM post_draft_versions
+WHERE is_auto_save = true
+AND created_at < NOW() - INTERVAL '30 days';
+
+-- 优化表
+VACUUM ANALYZE post_status_history;
+VACUUM ANALYZE post_draft_versions;
+```
+
+### 3. 备份策略
+- 每日增量备份
+- 每周完整备份
+- 保留 30 天历史
+
+## 扩展计划
+
+### 1. 待实现功能
+- [ ] 状态变更的权限控制
+- [ ] 状态变更的钩子（hooks）
+- [ ] 状态变更的通知机制
+- [ ] 状态变更的审计日志
+
+### 2. 性能优化
+- [ ] 添加状态历史分区表
+- [ ] 实现草稿版本归档
+- [ ] 优化查询性能
+``
