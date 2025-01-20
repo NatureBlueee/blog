@@ -1,3 +1,40 @@
+interface TestResult {
+  posts?: number
+  content?: boolean
+  responseTime?: number
+  firstPost?: {
+    id: string
+    title: string
+    slug: string
+    content?: string
+    excerpt?: string
+    status: string
+    created_at: string
+    published_at?: string
+    metadata?: {
+      views_count?: number
+      likes_count?: number
+      comments_count?: number
+    }
+    post_tags?: Array<{
+      id: string
+      tag_id: string
+      tags: {
+        id: string
+        name: string
+        slug: string
+      }
+    }>
+  }
+  markdownTest?: boolean
+  performance?: {
+    apiResponseTime: number
+    renderTime: number
+    totalTime: number
+    markdownParseTime: number
+  }
+}
+
 interface TestResultsProps {
   results: TestResult
 }
@@ -10,6 +47,9 @@ export function TestResults({ results }: TestResultsProps) {
           <h3 className='font-medium'>文章统计</h3>
           <p>总数: {results.posts || 0}</p>
           <p>首篇: {results.firstPost?.title}</p>
+          {results.firstPost?.post_tags && (
+            <p>标签: {results.firstPost.post_tags.map((pt) => pt.tags.name).join(', ')}</p>
+          )}
         </div>
 
         <div className='p-3 border rounded'>
@@ -25,6 +65,7 @@ export function TestResults({ results }: TestResultsProps) {
         <ul className='list-disc list-inside'>
           <li>文章内容: {results.content ? '✅' : '❌'}</li>
           <li>Markdown渲染: {results.markdownTest ? '✅' : '❌'}</li>
+          <li>元数据: {results.firstPost?.metadata ? '✅' : '❌'}</li>
         </ul>
       </div>
     </div>

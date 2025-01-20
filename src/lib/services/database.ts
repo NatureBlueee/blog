@@ -1,195 +1,224 @@
 import { BaseService } from './base'
-import type { Database, TableStats, DatabaseStatus, HealthCheck } from '@/types'
+import { DatabaseError } from '@/lib/errors'
+import type { Database } from '@/types/supabase'
 
-class DatabaseService extends BaseService {
+// 定义类型
+type TableName = keyof Database['public']['Tables']
+type TableCounts = Record<TableName, number>
+
+interface DatabaseStatus {
+  counts: TableCounts
+  lastChecked: string
+  isHealthy: boolean
+  version: string
+  tables: Array<{
+    name: string
+    status: 'ok' | 'error'
+    count: number
+  }>
+}
+
+export class DatabaseService extends BaseService {
+  // 定义常量
+  private readonly TABLES: TableName[] = [
+    'users',
+    'posts',
+    'tags',
+    'post_tags',
+    'post_versions',
+    'comments',
+  ]
+
+  // 统一获取状态方法
   async getStatus(): Promise<DatabaseStatus> {
-    return this.transaction(async () => {
-      try {
-        const connection = await this.checkConnection()
-        const tables = await this.getTableStats()
-        const health = await this.checkHealth()
-        const relationships = await this.getRelationships()
+    return this.getDatabaseStatus()
+  }
 
-        return {
-          connection,
-          tables,
-          health,
-          relationships,
-        }
-      } catch (error) {
-        console.error('获取数据库状态失败:', error)
-        throw error
+  // 核心方法：数据库初始化
+  async initializeDatabase() {
+    return this.transaction(async () => {
+      // 1. 清理数据
+      await this.clearAllData()
+
+      // 2. 验证结构
+      await this.validateSchema()
+
+      // 3. 获取状态
+      const status = await this.getDatabaseStatus()
+
+      return status
+    }, '初始化数据库')
+  }
+
+  // 核心方法：数据库验证
+  async validateSchema() {
+    return this.transaction(async () => {
+      const validations = await Promise.all(this.TABLES.map((table) => this.validateTable(table)))
+
+      const failedTables = validations.filter((v) => !v.isValid).map((v) => v.table)
+
+      if (failedTables.length > 0) {
+        throw new DatabaseError(`数据库验证失败: ${failedTables.join(', ')} 表存在问题`, 500)
+      }
+
+      return true
+    }, '验证数据库结构')
+  }
+
+  // 核心方法：获取数据库状态
+  async getDatabaseStatus(): Promise<DatabaseStatus> {
+    return this.transaction(async () => {
+      const counts = await this.getAllTableCounts()
+      const isHealthy = await this.checkDatabaseHealth()
+      const version = await this.getDatabaseVersion()
+
+      // 获取每个表的详细状态
+      const tables = await Promise.all(
+        this.TABLES.map(async (table) => {
+          const validation = await this.validateTable(table)
+          return {
+            name: table,
+            status: validation.isValid ? 'ok' : 'error',
+            count: counts[table] || 0,
+          }
+        })
+      )
+
+      return {
+        counts,
+        lastChecked: new Date().toISOString(),
+        isHealthy,
+        version,
+        tables,
       }
     }, '获取数据库状态')
   }
 
-  private async checkConnection() {
+  // 辅助方法：清理所有数据
+  private async clearAllData() {
+    const { error } = await this.supabase.rpc('initialize_database')
+    if (error) {
+      throw new DatabaseError('清理数据失败', 500, error)
+    }
+  }
+
+  // 辅助方法：验证单个表
+  private async validateTable(table: TableName) {
+    const { error } = await this.supabase.from(table).select('id').limit(1)
+
+    return {
+      table,
+      isValid: !error,
+      error,
+    }
+  }
+
+  // 辅助方法：获取所有表的计数
+  private async getAllTableCounts(): Promise<TableCounts> {
+    const counts = await Promise.all(
+      this.TABLES.map(async (table) => ({
+        table,
+        count: await this.getTableCount(table),
+      }))
+    )
+
+    return counts.reduce(
+      (acc, { table, count }) => ({
+        ...acc,
+        [table]: count,
+      }),
+      {} as TableCounts
+    )
+  }
+
+  // 辅助方法：获取单个表的计数
+  private async getTableCount(table: TableName): Promise<number> {
+    const { count, error } = await this.supabase
+      .from(table)
+      .select('*', { count: 'exact', head: true })
+
+    if (error) {
+      throw new DatabaseError(`获取${table}表计数失败`, 500, error)
+    }
+
+    return count || 0
+  }
+
+  // 辅助方法：检查数据库健康状态
+  private async checkDatabaseHealth(): Promise<boolean> {
     try {
-      const { data, error } = await this.supabase.from('posts').select('id').limit(1)
-
-      return {
-        connected: !error,
-        error: error?.message,
-        url: process.env.NEXT_PUBLIC_SUPABASE_URL,
-        hasAnon: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      }
-    } catch (error) {
-      return {
-        connected: false,
-        error: error instanceof Error ? error.message : '连接失败',
-      }
-    }
-  }
-
-  private async getTableStats() {
-    const tables = ['posts', 'tags', 'categories', 'comments', 'users']
-    const stats = []
-
-    for (const table of tables) {
-      try {
-        const { data, error } = await this.supabase
-          .from(table)
-          .select('count')
-          .is('deleted_at', null)
-          .single()
-
-        if (error) throw error
-
-        stats.push({
-          name: table,
-          count: data?.count || 0,
-          status: 'success',
-        })
-      } catch (error) {
-        stats.push({
-          name: table,
-          count: 0,
-          status: 'error',
-          error: error instanceof Error ? error.message : '未知错误',
-        })
-      }
-    }
-
-    return stats
-  }
-
-  async getDashboardStats() {
-    return this.transaction(async () => {
-      const { count: total } = await this.supabase
-        .from('posts')
-        .select('*', { count: 'exact', head: true })
-        .is('deleted_at', null)
-
-      const { count: published } = await this.supabase
-        .from('posts')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'published')
-        .is('deleted_at', null)
-
-      const { count: draft } = await this.supabase
-        .from('posts')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'draft')
-        .is('deleted_at', null)
-
-      return {
-        posts: { total, published, draft },
-        lastUpdated: new Date().toISOString(),
-      }
-    }, '获取仪表盘统计')
-  }
-
-  async initializeDatabase() {
-    return this.transaction(async () => {
-      // 初始化数据库
-      await this.clearAllData()
-      await this.createInitialData()
-      return this.getStatus()
-    }, '初始化数据库')
-  }
-
-  async clearAllData() {
-    const tables = ['post_tags', 'posts', 'tags', 'categories']
-    for (const table of tables) {
-      const { error } = await this.supabase.from(table).delete().not('id', 'is', null)
+      const { data, error } = await this.supabase.rpc('check_database_health')
       if (error) throw error
-    }
-  }
-
-  async validateSchema() {
-    return this.transaction(async () => {
-      const requiredTables = ['posts', 'tags', 'categories', 'post_tags']
-      const validation = {}
-
-      for (const table of requiredTables) {
-        const { data: columns, error } = await this.supabase.from(table).select('*').limit(0)
-
-        validation[table] = {
-          exists: !error,
-          error: error?.message,
-        }
-      }
-
-      return validation
-    }, '验证数据库结构')
-  }
-
-  private async checkHealth() {
-    const tables = ['posts', 'tags', 'categories', 'comments', 'users']
-    const health: Record<string, boolean> = {}
-
-    try {
-      // 检查数据库连接
-      const { error: connectionError } = await this.supabase.from('posts').select('id').limit(1)
-
-      health.database = !connectionError
-
-      // 检查各个表的访问权限
-      for (const table of tables) {
-        const { error } = await this.supabase.from(table).select('id').limit(1)
-
-        health[table] = !error
-      }
-
-      return health
+      return data?.isHealthy || false
     } catch (error) {
-      console.error('健康检查失败:', error)
-      return {
-        database: false,
-        posts: false,
-        tags: false,
-        categories: false,
-        comments: false,
-        users: false,
-      }
+      console.error('数据库健康检查失败:', error)
+      return false
     }
   }
 
-  private async getRelationships() {
-    const relationships = [
-      { from: 'posts', to: 'categories', through: 'category_id' },
-      { from: 'posts', to: 'tags', through: 'post_tags' },
-      { from: 'posts', to: 'users', through: 'author_id' },
-      { from: 'comments', to: 'posts', through: 'post_id' },
-      { from: 'comments', to: 'users', through: 'user_id' },
-    ]
-
-    return relationships
+  // 辅助方法：获取数据库版本
+  private async getDatabaseVersion(): Promise<string> {
+    try {
+      const { data, error } = await this.supabase.rpc('get_database_version')
+      if (error) throw error
+      return data?.version || 'unknown'
+    } catch (error) {
+      console.error('获取数据库版本失败:', error)
+      return 'unknown'
+    }
   }
 
+  // 监控方法：获取性能指标
+  async getPerformanceMetrics() {
+    return this.transaction(async () => {
+      const metrics = await this.supabase.rpc('get_database_metrics')
+      return metrics
+    }, '获取性能指标')
+  }
+
+  // 维护方法：优化数据库
+  async optimizeTables() {
+    return this.transaction(async () => {
+      await Promise.all(
+        this.TABLES.map((table) => this.supabase.rpc('optimize_table', { table_name: table }))
+      )
+    }, '优化数据库表')
+  }
+
+  // 添加获取文章预览列表方法
   async getPostsPreview() {
     return this.transaction(async () => {
-      const { data, error } = await this.supabase
+      const { data: posts, error } = await this.supabase
         .from('posts')
-        .select('id, title, slug, status, created_at')
-        .order('created_at', { ascending: false })
-        .limit(10)
+        .select(
+          `
+          id,
+          title,
+          slug,
+          status,
+          created_at,
+          published_at,
+          metadata,
+          excerpt,
+          post_tags (
+            id,
+            tag_id,
+            tags (
+              id,
+              name,
+              slug
+            )
+          )
+        `
+        )
         .is('deleted_at', null)
+        .order('created_at', { ascending: false })
 
       if (error) throw error
-      return data
-    }, '获取文章预览')
+      return { data: posts }
+    }, '获取文章预览列表')
   }
 }
 
+// 导出单例实例
 export const databaseService = new DatabaseService()

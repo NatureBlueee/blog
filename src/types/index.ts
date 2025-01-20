@@ -29,7 +29,7 @@ export interface Post {
   title: string
   content: string
   excerpt?: string
-  status: 'draft' | 'published'
+  status: PostStatus
   author_id: string
   featured_image?: string
   seo_title?: string
@@ -40,6 +40,25 @@ export interface Post {
   updated_at: string
   deleted_at?: string
   is_archived: boolean
+
+  // 关联数据，通过 Supabase join 获取
+  author?: {
+    id: string
+    email: string
+    name?: string
+  }
+  tags?: {
+    tag: {
+      id: string
+      name: string
+      slug: string
+    }
+  }[]
+  post_views?: {
+    id: string
+    created_at: string
+  }[]
+  views?: number
 }
 
 export interface PostMetadata {
@@ -251,4 +270,30 @@ export interface Tag {
   id: string
   name: string
   slug: string
+}
+
+export interface PostStats {
+  total: number
+  published: number
+  draft: number
+  totalViews: number
+  recentPosts: Array<{
+    id: string
+    title: string
+    slug: string
+    created_at: string
+  }>
+}
+
+// 添加查询参数接口
+export interface PostQueryParams {
+  status?: PostStatus
+  limit?: number
+  orderBy?: {
+    column: string
+    order: 'asc' | 'desc'
+  }
+  withAuthor?: boolean
+  withTags?: boolean
+  withViews?: boolean
 }

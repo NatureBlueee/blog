@@ -235,25 +235,25 @@ export function TestPanel() {
 
             {/* 文章列表（可滚动区域） */}
             <div className='flex-1 bg-white rounded-lg border border-gray-200 shadow-sm mt-4 overflow-hidden flex flex-col min-h-0'>
-              <div className='p-4 border-b border-gray-100'>
+              <div className='p-4 border-b border-gray-100 flex justify-between items-center'>
                 <h2 className='text-sm font-medium text-gray-900'>文章列表</h2>
+                {/* 添加测试结果展示 */}
+                {Object.keys(testResults).length > 0 && (
+                  <div className='text-sm text-gray-500'>
+                    最近测试: {new Date().toLocaleTimeString()}
+                  </div>
+                )}
               </div>
-              <div className='flex-1 overflow-y-auto p-4'>
-                <PostsList posts={posts} />
+              <div className='flex-1 p-4 overflow-y-auto'>
+                <PostsList posts={posts?.data} />
+                {/* 添加测试结果组件 */}
+                {Object.keys(testResults).length > 0 && (
+                  <div className='mt-4 border-t pt-4'>
+                    <TestResults results={testResults} />
+                  </div>
+                )}
               </div>
             </div>
-
-            {/* 测试结果（固定在底部） */}
-            {testResults && Object.keys(testResults).length > 0 && (
-              <div className='bg-white rounded-lg border border-gray-200 shadow-sm mt-4'>
-                <div className='p-4 border-b border-gray-100'>
-                  <h2 className='text-sm font-medium text-gray-900'>测试结果</h2>
-                </div>
-                <div className='p-4'>
-                  <TestResults results={testResults} />
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

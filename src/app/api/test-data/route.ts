@@ -1,12 +1,32 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase/client.ts'
 
-export async function POST() {
+async function generateTestData() {
+  const timestamp = Date.now()
+  const logs = []
+  const summary = {
+    tags: 0,
+    posts: 0,
+    comments: 0,
+    categories: 0,
+    views: 0,
+  }
+
   try {
-    // 生成唯一的时间戳后缀
-    const timestamp = Date.now()
+    // 1. 创建测试分类
+    const testCategories = [
+      { name: '前端开发', slug: 'frontend', description: '前端技术相关文章' },
+      { name: '后端开发', slug: 'backend', description: '后端开发与架构' },
+      { name: '开发工具', slug: 'tools', description: '提升开发效率的工具' },
+      { name: '最佳实践', slug: 'best-practices', description: '编程最佳实践' },
+    ]
 
-    // 1. 检查并创建测试标签
+    const { data: categories } = await supabase.from('categories').upsert(testCategories).select()
+
+    summary.categories = categories?.length || 0
+    logs.push({ level: 'info', message: `创建了 ${summary.categories} 个分类` })
+
+    // 2. 创建测试标签
     const testTags = [
       { name: 'React', slug: 'react' },
       { name: 'Next.js', slug: 'nextjs' },
@@ -18,122 +38,98 @@ export async function POST() {
       { name: 'DevOps', slug: 'devops' },
     ]
 
-    // 先获取已存在的标签
-    const { data: existingTags } = await supabase
-      .from('tags')
-      .select('slug')
-      .in(
-        'slug',
-        testTags.map((t) => t.slug)
-      )
+    const { data: tags } = await supabase.from('tags').upsert(testTags).select()
 
-    // 过滤出不存在的标签
-    const newTags = testTags.filter((tag) => !existingTags?.some((et) => et.slug === tag.slug))
+    summary.tags = tags?.length || 0
+    logs.push({ level: 'info', message: `创建了 ${summary.tags} 个标签` })
 
-    // 只插入新标签
-    if (newTags.length > 0) {
-      const { error: tagError } = await supabase.from('tags').upsert(newTags)
-      if (tagError) throw tagError
-    }
-
-    // 获取所有需要的标签
-    const { data: allTags, error: allTagsError } = await supabase
-      .from('tags')
-      .select()
-      .in(
-        'slug',
-        testTags.map((t) => t.slug)
-      )
-
-    if (allTagsError) throw allTagsError
-
-    // 2. 创建测试文章
-    const testPosts = [
-      {
-        title: '使用 Next.js 13 构建现代博客',
-        slug: `building-modern-blog-with-nextjs-13-${timestamp}`,
-        content: `# 使用 Next.js 13 构建现代博客\n\n...`,
-        excerpt: 'Next.js 13 带来了许多激动人心的新特性...',
-        status: 'published',
-        tags: ['nextjs', 'react', 'typescript'],
+    // 3. 创建测试文章
+    const testPosts = Array.from({ length: 10 }, (_, i) => ({
+      title: `测试文章 ${i + 1}`,
+      slug: `test-post-${i + 1}-${timestamp}`,
+      content: `# 测试文章 ${i + 1}\n\n这是一篇测试文章的内容...`,
+      excerpt: `这是测试文章 ${i + 1} 的摘要...`,
+      status: i < 7 ? 'published' : 'draft',
+      metadata: {
+        wordCount: Math.floor(Math.random() * 2000) + 500,
+        readingTime: `${Math.floor(Math.random() * 10) + 3} min`,
+        coverImage: null,
       },
-      {
-        title: 'TypeScript 高级技巧',
-        slug: `typescript-advanced-tips-${timestamp}`,
-        content: `# TypeScript 高级技巧\n\n...`,
-        excerpt: '探索 TypeScript 的高级特性和最佳实践...',
-        status: 'published',
-        tags: ['typescript', 'react'],
-      },
-      {
-        title: '全栈应用的自动化测试策略',
-        slug: `full-stack-testing-strategy-${timestamp}`,
-        content: `# 全栈应用的自动化测试策略\n\n...`,
-        excerpt: '探讨全栈应用中的测试策略...',
-        status: 'draft',
-        tags: ['testing', 'devops', 'typescript'],
-      },
-    ]
+    }))
 
-    // 清理旧的测试数据
-    await supabase.from('post_tags').delete().neq('id', 0)
-    await supabase.from('posts').delete().neq('id', 0)
-
-    // 创建新文章
     for (const post of testPosts) {
-      const { tags: postTags, ...postData } = post
-
-      // 添加时间戳到 slug 以确保唯一性
-      const uniqueSlug = `${postData.slug}-${Date.now()}`
-
       // 创建文章
-      const { data: createdPost, error: postError } = await supabase
-        .from('posts')
-        .upsert({
-          ...postData,
-          slug: uniqueSlug,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          status: 'published',
-        })
-        .select()
-        .single()
+      const { data: createdPost } = await supabase.from('posts').upsert(post).select().single()
 
-      if (postError) {
-        console.error('创建文章失败:', postError)
-        throw postError
-      }
+      if (createdPost) {
+        // 随机添加标签
+        const randomTags = tags
+          ?.sort(() => Math.random() - 0.5)
+          .slice(0, Math.floor(Math.random() * 3) + 1)
 
-      console.log('成功创建文章:', createdPost)
+        if (randomTags?.length) {
+          await supabase.from('post_tags').upsert(
+            randomTags.map((tag) => ({
+              post_id: createdPost.id,
+              tag_id: tag.id,
+            }))
+          )
+        }
 
-      // 创建文章-标签关联
-      const tagRelations = postTags
-        .map((tagSlug) => ({
-          post_id: createdPost.id,
-          tag_id: allTags?.find((t) => t.slug === tagSlug)?.id,
-        }))
-        .filter((relation) => relation.tag_id)
+        // 随机添加分类
+        const randomCategory = categories?.[Math.floor(Math.random() * categories.length)]
+        if (randomCategory) {
+          await supabase.from('post_categories').upsert({
+            post_id: createdPost.id,
+            category_id: randomCategory.id,
+          })
+        }
 
-      if (tagRelations.length > 0) {
-        const { error: relationError } = await supabase.from('post_tags').upsert(tagRelations)
+        // 创建测试评论
+        if (Math.random() > 0.5) {
+          const commentCount = Math.floor(Math.random() * 3) + 1
+          for (let j = 0; j < commentCount; j++) {
+            await supabase.from('comments').insert({
+              post_id: createdPost.id,
+              content: `这是测试评论 ${j + 1}`,
+              status: 'published',
+            })
+            summary.comments++
+          }
+        }
 
-        if (relationError) {
-          console.error('创建标签关联失败:', relationError)
-          throw relationError
+        // 创建浏览记录
+        const viewCount = Math.floor(Math.random() * 100)
+        for (let k = 0; k < viewCount; k++) {
+          await supabase.from('post_views').insert({
+            post_id: createdPost.id,
+            view_count: 1,
+          })
+          summary.views++
         }
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      message: '测试数据创建成功',
-      summary: {
-        tags: allTags?.length || 0,
-        posts: testPosts.length,
-      },
-    })
+    summary.posts = testPosts.length
+    logs.push({ level: 'info', message: `创建了 ${summary.posts} 篇文章` })
+    logs.push({ level: 'info', message: `创建了 ${summary.comments} 条评论` })
+    logs.push({ level: 'info', message: `生成了 ${summary.views} 次浏览记录` })
+
+    return { success: true, summary, logs }
   } catch (error) {
-    console.error('创建测试数据失败:', error)
+    logs.push({
+      level: 'error',
+      message: error instanceof Error ? error.message : '创建测试数据失败',
+    })
+    throw error
+  }
+}
+
+export async function POST() {
+  try {
+    const { success, summary, logs } = await generateTestData()
+    return NextResponse.json({ success, summary, logs })
+  } catch (error) {
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : '创建测试数据失败',

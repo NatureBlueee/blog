@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { PostService } from '@/lib/services/posts'
+import { PostService } from '/lib/services/post.ts'
 
 export async function PATCH(request: Request, { params }: { params: { slug: string } }) {
   try {

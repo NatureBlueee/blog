@@ -134,6 +134,23 @@ CREATE TABLE post_views (
     referer TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 添加用户关系和权限
+-- 1. 确保 auth.users 表可以被引用
+GRANT REFERENCES ON auth.users TO authenticated;
+GRANT REFERENCES ON auth.users TO service_role;
+
+-- 2. 创建用户信息视图
+CREATE OR REPLACE VIEW public.user_profiles AS 
+SELECT id, email, raw_user_meta_data->>'name' as name
+FROM auth.users;
+
+-- 3. 授予访问权限
+GRANT SELECT ON public.user_profiles TO authenticated;
+GRANT SELECT ON public.user_profiles TO anon;
+
+-- 4. 刷新 PostgREST schema 缓存
+NOTIFY pgrst, 'reload schema';
 ```
 
 ### 2. 索引创建
@@ -1097,7 +1114,7 @@ ORDER BY ss.avg_duration DESC;
 
 #### 3. 数据收集要点
 
-1. **������区块标记**
+1. **区块标记**
    - 为文章内容添加 section_id
    - 标记不同的内容类型（text/image/code）
    - 记录区块在页面中的位置
@@ -2972,3 +2989,252 @@ CREATE INDEX idx_post_recommendations_viewer ON post_recommendations(viewer_ip);
 ```
 
 [原有的函数定义和注意事项保持不变...]
+# 数据库安全性配置
+
+## 1. 级联删除策略
+
+### 1.1 核心表级联关系
+```sql
+-- posts 表关联的级联删除
+ALTER TABLE post_versions 
+    DROP CONSTRAINT IF EXISTS post_versions_post_id_fkey,
+    ADD CONSTRAINT post_versions_post_id_fkey 
+    FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE;
+
+ALTER TABLE post_tags 
+    DROP CONSTRAINT IF EXISTS post_tags_post_id_fkey,
+    ADD CONSTRAINT post_tags_post_id_fkey 
+    FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE;
+
+-- ... 其他关联表的类似配置
+```
+
+### 1.2 数据审计
+```sql
+-- 审计日志表
+CREATE TABLE IF NOT EXISTS deletion_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    table_name TEXT NOT NULL,
+    record_id UUID NOT NULL,
+    deleted_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    deleted_by UUID REFERENCES auth.users(id),
+    metadata JSONB
+);
+
+-- 删除触发器
+CREATE OR REPLACE FUNCTION log_deletion()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO deletion_logs (table_name, record_id, deleted_by, metadata)
+    VALUES (TG_TABLE_NAME, OLD.id, auth.uid(), 
+        jsonb_build_object('title', OLD.title, 'slug', OLD.slug));
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tr_log_post_deletion
+    BEFORE DELETE ON posts
+    FOR EACH ROW
+    EXECUTE FUNCTION log_deletion();
+```
+
+## 2. 数据保护策略
+
+### 2.1 软删除实现
+```sql
+-- 所有核心表都包含 deleted_at 字段
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+-- ... 其他需要软删除的表
+
+-- 软删除视图
+CREATE OR REPLACE VIEW v_active_posts AS
+SELECT * FROM posts WHERE deleted_at IS NULL;
+```
+
+### 2.2 数据备份触发器
+```sql
+-- 重要操作前的自动备份
+CREATE OR REPLACE FUNCTION backup_before_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO post_backups 
+    SELECT *, CURRENT_TIMESTAMP as backup_time 
+    FROM posts 
+    WHERE id = OLD.id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tr_backup_post_before_delete
+    BEFORE DELETE ON posts
+    FOR EACH ROW
+    EXECUTE FUNCTION backup_before_delete();
+```
+
+## 3. 安全最佳实践
+
+### 3.1 权限控制
+```sql
+-- RLS 策略
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
+-- ... 其他表的 RLS 配置
+
+-- 创建访问策略
+CREATE POLICY "Users can view published posts"
+    ON posts FOR SELECT
+    USING (status = 'published' OR auth.uid() = author_id);
+```
+
+### 3.2 数据验证
+```sql
+-- 添加检查约束
+ALTER TABLE posts 
+    ADD CONSTRAINT valid_status 
+    CHECK (status IN ('draft', 'published', 'archived'));
+
+-- 添加非空约束
+ALTER TABLE posts 
+    ALTER COLUMN title SET NOT NULL,
+    ALTER COLUMN slug SET NOT NULL;
+```
+
+## 4. 性能优化
+
+### 4.1 索引优化
+```sql
+-- 软删除查询优化
+CREATE INDEX idx_posts_deleted_at ON posts(deleted_at) WHERE deleted_at IS NOT NULL;
+
+-- 审计日志查询优化
+CREATE INDEX idx_deletion_logs_table_record ON deletion_logs(table_name, record_id);
+CREATE INDEX idx_deletion_logs_deleted_at ON deletion_logs(deleted_at);
+```
+
+### 4.2 定期维护
+```sql
+-- 清理过期日志
+DELETE FROM deletion_logs 
+WHERE deleted_at < CURRENT_TIMESTAMP - INTERVAL '90 days';
+
+-- 清理过期备份
+DELETE FROM post_backups 
+WHERE backup_time < CURRENT_TIMESTAMP - INTERVAL '30 days';
+```
+### 5. 数据库健康检查
+
+```sql
+-- 创建数据库健康检查函数
+CREATE OR REPLACE FUNCTION check_database_health()
+RETURNS jsonb AS $$
+DECLARE
+    result jsonb;
+BEGIN
+    SELECT jsonb_build_object(
+        'status', 'healthy',
+        'tables', (
+            SELECT jsonb_object_agg(table_name, row_count)
+            FROM (
+                SELECT 
+                    table_name::text,
+                    (SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = t.table_name)::int as row_count
+                FROM information_schema.tables t
+                WHERE table_schema = 'public'
+                AND table_type = 'BASE TABLE'
+            ) counts
+        ),
+        'last_vacuum', (
+            SELECT jsonb_object_agg(relname, last_vacuum)
+            FROM pg_stat_user_tables
+            WHERE schemaname = 'public'
+        ),
+        'size', (
+            SELECT jsonb_object_agg(tablename, pg_size_pretty(pg_total_relation_size(quote_ident(tablename))))
+            FROM pg_tables
+            WHERE schemaname = 'public'
+        )
+    ) INTO result;
+
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 创建数据库版本检查函数
+CREATE OR REPLACE FUNCTION get_database_version()
+RETURNS jsonb AS $$
+DECLARE
+    result jsonb;
+BEGIN
+    SELECT jsonb_build_object(
+        'version', current_setting('server_version'),
+        'tables', (
+            SELECT jsonb_object_agg(table_name, row_count)
+            FROM (
+                SELECT 
+                    table_name::text,
+                    (SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = t.table_name)::int as row_count
+                FROM information_schema.tables t
+                WHERE table_schema = 'public'
+                AND table_type = 'BASE TABLE'
+            ) counts
+        ),
+        'table_stats', (
+            SELECT jsonb_agg(jsonb_build_object(
+                'name', table_name,
+                'columns', (
+                    SELECT count(*)::int 
+                    FROM information_schema.columns c 
+                    WHERE c.table_name = t.table_name 
+                    AND c.table_schema = 'public'
+                ),
+                'has_data', (
+                    SELECT EXISTS (
+                        SELECT 1 
+                        FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = t.table_name
+                    )
+                )
+            ))
+            FROM information_schema.tables t
+            WHERE table_schema = 'public'
+            AND table_type = 'BASE TABLE'
+        )
+    ) INTO result;
+
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 授予执行权限
+GRANT EXECUTE ON FUNCTION check_database_health() TO authenticated;
+GRANT EXECUTE ON FUNCTION check_database_health() TO anon;
+GRANT EXECUTE ON FUNCTION get_database_version() TO authenticated;
+GRANT EXECUTE ON FUNCTION get_database_version() TO anon;
+```
+
+#### 健康检查说明
+
+1. **check_database_health 函数**
+   - 检查数据库整体健康状态
+   - 返回各表记录数统计
+   - 显示最近 VACUUM 时间
+   - 显示表空间使用情况
+
+2. **get_database_version 函数**
+   - 返回数据库版本信息
+   - 提供表结构统计
+   - 显示数据存在状态
+
+3. **使用场景**
+   - 系统健康监控
+   - 性能诊断
+   - 容量规划
+   - 维护检查
+
+4. **注意事项**
+   - 定期执行健康检查
+   - 监控表增长趋势
+   - 关注异常变化
+   - 及时优化性能

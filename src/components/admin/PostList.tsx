@@ -2,212 +2,132 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
-import { format, parseISO } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
-import type { BlogPost } from '@/types'
 import {
-  HiEye,
+  HiPlus,
+  HiSearch,
   HiPencil,
   HiTrash,
-  HiPlus,
-  HiClock,
-  HiDocumentDuplicate,
   HiArchive,
+  HiEye,
+  HiCalendar,
+  HiTag,
   HiCheck,
-  HiSearch,
+  HiUser,
 } from 'react-icons/hi'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
-import { PostStatusToggle } from '@/components/admin/PostStatusToggle'
-import { Card, CardContent } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import { toast } from '@/components/ui/use-toast'
 import { Loader2 } from 'lucide-react'
+import { formatDate } from '@/utils/date'
+import { postService } from '@/lib/services/post'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Alert } from '@/components/ui/alert'
+import { Skeleton } from '@/components/ui/skeleton'
+import { toast } from '@/components/ui/use-toast'
+import { PostStatusToggle } from './PostStatusToggle'
+import type { Post, PostStatus, PostVersion } from '@/types'
 
-interface PostVersion {
-  id: string
-  version_type: 'auto' | 'manual'
-  description: string | null
-  created_at: string
+interface PostListProps {
+  onRefresh?: () => void
 }
 
-type PostStatus = 'draft' | 'published'
-
-// 添加日期格式化工具函数
-const formatDate = (dateString: string | null | undefined) => {
-  if (!dateString) return '未知时间'
-  try {
-    // 确保日期字符串是有效的
-    const date = new Date(dateString)
-    if (isNaN(date.getTime())) return '无效日期'
-
-    return format(date, 'PPP HH:mm:ss', { locale: zhCN })
-  } catch (error) {
-    console.error('日期格式化错误:', error)
-    return '日期格式错误'
-  }
-}
-
-export default function PostList() {
-  const [posts, setPosts] = useState<BlogPost[]>([])
+export default function PostList({ onRefresh }: PostListProps) {
+  const [posts, setPosts] = useState<Post[]>([])
   const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = useState<'all' | 'published' | 'draft'>('all')
-  const [stats, setStats] = useState({
-    total: 0,
-    published: 0,
-    draft: 0,
-    views: 0,
-  })
-  const [selectedPost, setSelectedPost] = useState<
-    (BlogPost & { versions?: PostVersion[] }) | null
-  >(null)
+  const [selectedPost, setSelectedPost] = useState<(Post & { versions?: PostVersion[] }) | null>(
+    null
+  )
   const [isVersionsModalOpen, setIsVersionsModalOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
-    const init = async () => {
-      setIsLoading(true)
-      try {
-        await Promise.all([fetchPosts(), fetchStats()])
-      } catch (error) {
-        console.error('初始化数据失败:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    init()
+    fetchPosts()
   }, [activeTab])
 
   const fetchPosts = async () => {
     try {
-      const url = '/api/posts' + (activeTab !== 'all' ? `?status=${activeTab}` : '')
-      console.log('Fetching posts from:', url)
-
-      const response = await fetch(url)
-      console.log('Response status:', response.status)
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || '获取文章列表失败')
-      }
-
-      const data = await response.json()
-      console.log('Posts data:', {
-        count: data.length,
-        sample: data[0],
-        allDates: data.map((p) => p.updated_at),
-      })
-
+      setIsLoading(true)
+      const data = await postService.getPosts(activeTab !== 'all' ? activeTab : undefined)
       setPosts(data)
     } catch (error) {
       console.error('获取文章列表失败:', error)
-    }
-  }
-
-  const fetchStats = async () => {
-    try {
-      const response = await fetch('/api/posts/stats')
-      if (!response.ok) throw new Error('获取统计数据失败')
-      const data = await response.json()
-      setStats(data)
-    } catch (error) {
-      console.error('获取统计数据失败:', error)
-    }
-  }
-
-  const handleViewVersions = async (post: BlogPost) => {
-    try {
-      const response = await fetch(`/api/posts/${post.slug}/versions`)
-      if (!response.ok) throw new Error('获取版本历史失败')
-
-      const versions = await response.json()
-      setSelectedPost({ ...post, versions })
-      setIsVersionsModalOpen(true)
-    } catch (error) {
-      console.error('获取版本历史失败:', error)
-    }
-  }
-
-  const handleRestoreVersion = async (post: BlogPost, versionId: string) => {
-    try {
-      const response = await fetch(`/api/posts/${post.slug}/versions/${versionId}/restore`, {
-        method: 'POST',
-      })
-      if (!response.ok) throw new Error('恢复版本失败')
-
-      const updatedPost = await response.json()
-      setPosts(posts.map((p) => (p.slug === post.slug ? { ...p, ...updatedPost } : p)))
-      setIsVersionsModalOpen(false)
-    } catch (error) {
-      console.error('恢复版本失败:', error)
-    }
-  }
-
-  const handleStatusChange = async (post: BlogPost, newStatus: PostStatus) => {
-    try {
-      setIsLoading(true)
-      const response = await fetch(`/api/posts/${post.slug}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || '更新文章状态失败')
-      }
-
-      const updatedPost = await response.json()
-      setPosts(posts.map((p) => (p.slug === post.slug ? { ...p, ...updatedPost } : p)))
-      toast({
-        title: '状态更新成功',
-        description: `文章《${post.title}》已${newStatus === 'published' ? '发布' : '设为草稿'}`,
-      })
-
-      // 更新统计数据
-      await fetchStats()
-    } catch (error) {
-      console.error('更新文章状态失败:', error)
       toast({
         variant: 'destructive',
-        title: '操作失败',
-        description: error instanceof Error ? error.message : '更新文章状态失败',
+        title: '获取失败',
+        description: error instanceof Error ? error.message : '获取文章列表失败',
       })
     } finally {
       setIsLoading(false)
     }
   }
 
-  const filteredPosts = useMemo(() => {
-    return posts.filter(
-      (post) =>
-        post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (post.excerpt && post.excerpt.toLowerCase().includes(searchQuery.toLowerCase()))
-    )
-  }, [posts, searchQuery])
+  const handleViewVersions = async (post: Post) => {
+    try {
+      const versions = await postService.getPostVersions(post.slug)
+      setSelectedPost({ ...post, versions })
+      setIsVersionsModalOpen(true)
+    } catch (error) {
+      console.error('获取版本历史失败:', error)
+      toast({
+        variant: 'destructive',
+        title: '获取失败',
+        description: '获取版本历史失败',
+      })
+    }
+  }
+
+  const handleRestoreVersion = async (post: Post, versionId: string) => {
+    try {
+      const updatedPost = await postService.restorePostVersion(post.slug, versionId)
+      setPosts(posts.map((p) => (p.slug === post.slug ? { ...p, ...updatedPost } : p)))
+      setIsVersionsModalOpen(false)
+      toast({
+        title: '恢复成功',
+        description: '已恢复到选定版本',
+      })
+    } catch (error) {
+      console.error('恢复版本失败:', error)
+      toast({
+        variant: 'destructive',
+        title: '恢复失败',
+        description: '恢复版本失败',
+      })
+    }
+  }
 
   const handleSelect = (slug: string) => {
     setSelectedPosts((prev) => {
-      const newSelection = new Set(prev)
-      if (newSelection.has(slug)) {
-        newSelection.delete(slug)
+      const next = new Set(prev)
+      if (next.has(slug)) {
+        next.delete(slug)
       } else {
-        newSelection.add(slug)
+        next.add(slug)
       }
-      return newSelection
+      return next
     })
   }
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedPosts(new Set(filteredPosts.map((post) => post.slug)))
-    } else {
-      setSelectedPosts(new Set())
+  const handleStatusChange = async (post: Post, newStatus: PostStatus) => {
+    try {
+      setIsLoading(true)
+      const updatedPost = await postService.updatePostStatus(post.slug, newStatus)
+      setPosts(posts.map((p) => (p.slug === post.slug ? { ...p, ...updatedPost } : p)))
+      toast({
+        title: '状态更新成功',
+        description: `文章《${post.title}》已${newStatus === 'published' ? '发布' : '设为草稿'}`,
+      })
+      onRefresh?.()
+    } catch (error) {
+      console.error('更新文章状态失败:', error)
+      toast({
+        variant: 'destructive',
+        title: '更新失败',
+        description: error instanceof Error ? error.message : '更新文章状态失败',
+      })
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -216,32 +136,14 @@ export default function PostList() {
 
     try {
       setIsLoading(true)
-      const response = await fetch('/api/posts/bulk-delete', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          slugs: Array.from(selectedPosts),
-        }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || '批量删除失败')
-      }
-
-      // 更新本地状态
+      await postService.bulkDeletePosts(Array.from(selectedPosts))
       setPosts(posts.filter((post) => !selectedPosts.has(post.slug)))
       setSelectedPosts(new Set())
-
       toast({
         title: '删除成功',
         description: `已删除 ${selectedPosts.size} 篇文章`,
       })
-
-      // 更新统计数据
-      await fetchStats()
+      onRefresh?.()
     } catch (error) {
       console.error('批量删除失败:', error)
       toast({
@@ -254,145 +156,91 @@ export default function PostList() {
     }
   }
 
-  const handleBulkArchive = async () => {
-    setIsLoading(true)
-    try {
-      const response = await fetch('/api/posts/bulk-archive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selectedPosts }),
-      })
-
-      if (!response.ok) throw new Error('批量归档失败')
-
-      await fetchPosts() // 重新获取文章列表
-      setSelectedPosts([])
-      toast({ title: '成功', description: '已归档选中的文章' })
-    } catch (error) {
-      console.error('批量归档失败:', error)
-      toast({ variant: 'destructive', title: '错误', description: '批量归档失败' })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // 统计信息卡片
-  const StatsSection = ({ stats }: { stats: typeof initialStats }) => {
-    return (
-      <div className='grid grid-cols-1 md:grid-cols-4 gap-4 mb-6'>
-        <div className='p-4 rounded-lg border bg-white shadow-sm'>
-          <div className='text-sm text-gray-500'>总文章</div>
-          <div className='text-2xl font-bold text-gray-900'>{stats.total}</div>
-        </div>
-
-        <div className='p-4 rounded-lg border bg-white shadow-sm'>
-          <div className='text-sm text-gray-500'>已发布</div>
-          <div className='text-2xl font-bold text-green-600'>{stats.published}</div>
-        </div>
-
-        <div className='p-4 rounded-lg border bg-white shadow-sm'>
-          <div className='text-sm text-gray-500'>草稿</div>
-          <div className='text-2xl font-bold text-yellow-600'>{stats.draft}</div>
-        </div>
-
-        <div className='p-4 rounded-lg border bg-white shadow-sm'>
-          <div className='text-sm text-gray-500'>总浏览量</div>
-          <div className='text-2xl font-bold text-blue-600'>{stats.views}</div>
-        </div>
-      </div>
+  const filteredPosts = useMemo(() => {
+    return posts.filter(
+      (post) =>
+        post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        post.excerpt?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        post.tags?.some((tag) => tag.name.toLowerCase().includes(searchQuery.toLowerCase()))
     )
-  }
+  }, [posts, searchQuery])
 
-  // 批量操作工具栏
-  const BulkActionToolbar = () => (
-    <div
-      className={`
-      fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 
-      border-t p-4 flex items-center justify-between
-      transform transition-transform duration-200
-      ${selectedPosts.length > 0 ? 'translate-y-0' : 'translate-y-full'}
-    `}
-    >
-      <div className='flex items-center gap-2'>
-        <span className='text-sm text-gray-500'>已选择 {selectedPosts.length} 篇文章</span>
-        <Button variant='ghost' size='sm' onClick={() => setSelectedPosts([])} disabled={isLoading}>
-          取消选择
-        </Button>
-      </div>
-      <div className='flex items-center gap-2'>
-        <Button variant='outline' size='sm' disabled={isLoading} onClick={handleBulkArchive}>
-          {isLoading ? (
-            <Loader2 className='w-4 h-4 mr-1 animate-spin' />
-          ) : (
-            <HiArchive className='w-4 h-4 mr-1' />
+  // 复用 RecentPosts 的文章卡片样式
+  const PostItem = ({ post }: { post: Post }) => (
+    <div className='group p-4 rounded-lg border bg-card hover:bg-accent transition-colors'>
+      <div className='flex items-start justify-between'>
+        <Checkbox
+          checked={selectedPosts.has(post.slug)}
+          onCheckedChange={() => handleSelect(post.slug)}
+          aria-label={`选择文章 ${post.title}`}
+          className='mt-1'
+        />
+        <div className='flex-1 min-w-0 space-y-1 ml-4'>
+          <Link
+            href={`/admin/posts/${post.slug}/edit`}
+            className='font-medium hover:text-primary truncate block'
+          >
+            {post.title}
+          </Link>
+          {post.excerpt && (
+            <p className='text-sm text-muted-foreground line-clamp-2'>{post.excerpt}</p>
           )}
-          批量归档
-        </Button>
-        <Button variant='destructive' size='sm' disabled={isLoading} onClick={handleBulkDelete}>
-          {isLoading ? (
-            <Loader2 className='w-4 h-4 mr-1 animate-spin' />
-          ) : (
-            <HiTrash className='w-4 h-4 mr-1' />
+          <div className='flex items-center gap-4 text-xs text-muted-foreground'>
+            <span className='flex items-center gap-1'>
+              <HiCalendar className='w-4 h-4' />
+              {formatDate(post.created_at)}
+            </span>
+            <span className='flex items-center gap-1'>
+              <HiEye className='w-4 h-4' />
+              {post.views} 次浏览
+            </span>
+            {post.author?.name && (
+              <span className='flex items-center gap-1'>
+                <HiUser className='w-4 h-4' />
+                {post.author.name}
+              </span>
+            )}
+          </div>
+          {post.tags && post.tags.length > 0 && (
+            <div className='flex items-center gap-2 mt-2'>
+              <HiTag className='w-4 h-4 text-muted-foreground' />
+              <div className='flex gap-1 flex-wrap'>
+                {post.tags.map((tag) => (
+                  <Badge key={tag.id} variant='secondary'>
+                    {tag.name}
+                  </Badge>
+                ))}
+              </div>
+            </div>
           )}
-          批量删除
-        </Button>
+        </div>
+        <div className='flex items-center gap-2 ml-4'>
+          <PostStatusToggle
+            postId={post.id}
+            slug={post.slug}
+            initialStatus={post.status}
+            onStatusChange={(newStatus) => handleStatusChange(post, newStatus)}
+          />
+          <Button
+            variant='ghost'
+            size='icon'
+            onClick={() => handleViewVersions(post)}
+            title='查看版本历史'
+          >
+            <HiArchive className='w-4 h-4' />
+          </Button>
+          <Button variant='ghost' size='icon' asChild>
+            <Link href={`/admin/posts/${post.slug}/edit`} title='编辑文章'>
+              <HiPencil className='w-4 h-4' />
+            </Link>
+          </Button>
+        </div>
       </div>
     </div>
   )
 
-  // 文章列表项
-  const PostItem = ({ post }: { post: BlogPost }) => {
-    return (
-      <div className='p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors'>
-        <div className='flex items-start gap-4'>
-          <Checkbox aria-label={`选择文章 ${post.title}`} className='peer' />
-          <div className='flex-1'>
-            <div className='flex items-center gap-2 mb-1'>
-              <h3 className='font-medium'>{post.title || '无标题'}</h3>
-              <Badge variant='secondary'>{post.status === 'published' ? '已发布' : '草稿'}</Badge>
-            </div>
-            <div className='text-sm text-gray-500 mb-2'>{post.excerpt || '暂无摘要'}</div>
-            <div className='flex items-center gap-4 text-sm text-gray-500'>
-              <span>更新于: {formatDate(post.updated_at)}</span>
-              <span className='flex items-center'>
-                <HiEye className='w-4 h-4 mr-1' />
-                {post.view_count || 0} 次浏览
-              </span>
-            </div>
-          </div>
-          <div className='flex items-center gap-2'>
-            <Button variant='ghost' size='icon' asChild>
-              <Link href={`/admin/posts/${post.slug}/edit`}>
-                <HiPencil className='w-4 h-4' />
-                <span className='sr-only'>编辑</span>
-              </Link>
-            </Button>
-            <Button variant='ghost' size='icon' onClick={() => handleShowVersions(post)}>
-              <HiClock className='w-4 h-4' />
-              <span className='sr-only'>历史版本</span>
-            </Button>
-            <Button variant='ghost' size='icon' onClick={() => handleDeletePost(post)}>
-              <HiTrash className='w-4 h-4' />
-              <span className='sr-only'>删除</span>
-            </Button>
-          </div>
-        </div>
-        <div className='flex items-center gap-2 mt-4'>
-          <PostStatusToggle
-            postId={post.id}
-            initialStatus={post.status as PostStatus}
-            onStatusChange={(newStatus) => handleStatusChange(post, newStatus)}
-          />
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className='space-y-6 pb-20'>
-      <StatsSection stats={stats} />
-
-      {/* 现有的标签和搜索部分 */}
       <div className='flex justify-between items-center'>
         <div className='flex gap-4'>
           {[
@@ -430,8 +278,10 @@ export default function PostList() {
       </div>
 
       {isLoading ? (
-        <div className='flex items-center justify-center py-8'>
-          <Loader2 className='w-8 h-8 animate-spin text-primary' />
+        <div className='space-y-4'>
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className='h-32 w-full' />
+          ))}
         </div>
       ) : (
         <div className='space-y-4'>
@@ -444,7 +294,29 @@ export default function PostList() {
         </div>
       )}
 
-      {/* 版本历史对话框 */}
+      {selectedPosts.size > 0 && (
+        <div className='fixed bottom-0 left-0 right-0 bg-background border-t p-4 flex items-center justify-between'>
+          <div className='flex items-center gap-2'>
+            <span className='text-sm text-muted-foreground'>
+              已选择 {selectedPosts.size} 篇文章
+            </span>
+            <Button variant='ghost' size='sm' onClick={() => setSelectedPosts(new Set())}>
+              取消选择
+            </Button>
+          </div>
+          <div className='flex items-center gap-2'>
+            <Button variant='destructive' size='sm' disabled={isLoading} onClick={handleBulkDelete}>
+              {isLoading ? (
+                <Loader2 className='w-4 h-4 mr-1 animate-spin' />
+              ) : (
+                <HiTrash className='w-4 h-4 mr-1' />
+              )}
+              批量删除
+            </Button>
+          </div>
+        </div>
+      )}
+
       <Dialog open={isVersionsModalOpen} onOpenChange={setIsVersionsModalOpen}>
         <DialogContent className='max-w-2xl'>
           <DialogHeader>
@@ -460,7 +332,9 @@ export default function PostList() {
                   <div className='font-medium'>
                     {version.version_type === 'auto' ? '自动保存' : '手动保存'}
                   </div>
-                  <div className='text-sm text-gray-500'>{formatDate(version.created_at)}</div>
+                  <div className='text-sm text-muted-foreground'>
+                    {formatDate(version.created_at)}
+                  </div>
                   {version.description && <div className='text-sm mt-1'>{version.description}</div>}
                 </div>
                 <Button
@@ -476,9 +350,6 @@ export default function PostList() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* 批量操作工具栏 */}
-      <BulkActionToolbar />
     </div>
   )
 }

@@ -1,11 +1,21 @@
 {
+  // TypeScript 配置文件
+  //
+  // 用途：
+  // - 配置 TypeScript 编译选项
+  // - 设置模块解析规则
+  // - 定义路径别名
+  // - 指定项目范围
+  //
+  // 主要配置：
+  // - compilerOptions: 编译器选项
+  // - include: 包含的文件模式
+  // - exclude: 排除的文件模式
+  // - paths: 路径别名映射
+
   "compilerOptions": {
     "target": "es5",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -20,12 +30,8 @@
     "incremental": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "contentlayer/generated": [
-        "./.contentlayer/generated"
-      ]
+      "@/*": ["./src/*"],
+      "contentlayer/generated": ["./.contentlayer/generated"]
     },
     "plugins": [
       {
@@ -40,7 +46,5 @@
     ".contentlayer/generated",
     ".next/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }

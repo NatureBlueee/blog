@@ -1,0 +1,45 @@
+export class DatabaseError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public details?: unknown
+  ) {
+    super(message)
+    this.name = 'DatabaseError'
+  }
+}
+export class AppError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public statusCode: number = 500
+  ) {
+    super(message)
+    this.name = 'AppError'
+  }
+}
+
+export class PostError extends AppError {
+  constructor(message: string, code: string) {
+    super(message, `POST_${code}`, 500)
+    this.name = 'PostError'
+  }
+}
+
+export class AuthError extends AppError {
+  constructor(message: string, code: string) {
+    super(message, `AUTH_${code}`, 401)
+    this.name = 'AuthError'
+  }
+}
+
+export class DatabaseError extends Error {
+  constructor(
+    message: string,
+    public code?: string,
+    public originalError?: unknown
+  ) {
+    super(message)
+    this.name = 'DatabaseError'
+  }
+}

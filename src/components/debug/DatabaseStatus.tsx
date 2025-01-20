@@ -9,6 +9,7 @@ import { HealthStatus } from './HealthStatus'
 import { DashboardStats } from './DashboardStats'
 import { Button } from '@/components/ui/button'
 import { RefreshCw } from 'lucide-react'
+import { Card } from '@/components/ui/card'
 
 export function DatabaseStatus() {
   const [isRefreshing, setIsRefreshing] = useState(false)

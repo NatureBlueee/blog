@@ -4,12 +4,14 @@ import { useState } from 'react'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { toast } from '@/components/ui/use-toast'
+import { postService } from '@/lib/services/post'
+import type { PostStatus } from '@/types'
 
 interface PostStatusToggleProps {
   postId: string
   slug: string
-  initialStatus?: 'draft' | 'published'
-  onStatusChange?: (status: 'draft' | 'published') => void
+  initialStatus?: PostStatus
+  onStatusChange?: (status: PostStatus) => void
 }
 
 export function PostStatusToggle({
@@ -18,7 +20,7 @@ export function PostStatusToggle({
   initialStatus = 'draft',
   onStatusChange,
 }: PostStatusToggleProps) {
-  const [status, setStatus] = useState<'draft' | 'published'>(initialStatus)
+  const [status, setStatus] = useState<PostStatus>(initialStatus)
   const [isLoading, setIsLoading] = useState(false)
 
   const handleStatusChange = async (checked: boolean) => {
@@ -31,23 +33,11 @@ export function PostStatusToggle({
       return
     }
 
+    const newStatus: PostStatus = checked ? 'published' : 'draft'
+
     try {
       setIsLoading(true)
-      const newStatus = checked ? 'published' : 'draft'
-
-      const response = await fetch(`/api/posts/${slug}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || '更新状态失败')
-      }
+      await postService.updatePostStatus(slug, newStatus)
 
       setStatus(newStatus)
       onStatusChange?.(newStatus)
