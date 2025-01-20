@@ -1,35 +1,25 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { HiX, HiEye, HiSave } from 'react-icons/hi'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/use-toast'
 import { BlogEditor } from '@/components/editor/BlogEditor'
 import { postService } from '@/lib/services/post'
+import type { PostFormData } from '@/types'
 
 export default function NewPostPage() {
   const router = useRouter()
-  const [title, setTitle] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleCreatePost = async (content: string) => {
-    if (!title.trim()) {
-      toast({
-        variant: 'destructive',
-        title: '错误',
-        description: '请输入文章标题',
-      })
-      return
-    }
-
+  const handleCreatePost = async (content: string, formData: PostFormData) => {
     try {
-      setIsSubmitting(true)
       const post = await postService.create({
-        title: title.trim(),
+        title: formData.title,
+        slug: formData.slug,
         content,
+        excerpt: formData.excerpt,
         status: 'draft',
+        metadata: { tags: formData.tags },
       })
 
       toast({
@@ -37,7 +27,7 @@ export default function NewPostPage() {
         description: '文章已保存为草稿',
       })
 
-      router.push(`/admin/write/${post.slug}`)
+      router.push(`/admin/posts/${post.id}/edit`)
     } catch (error) {
       console.error('创建文章失败:', error)
       toast({
@@ -45,8 +35,6 @@ export default function NewPostPage() {
         title: '错误',
         description: error instanceof Error ? error.message : '创建文章失败',
       })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -58,44 +46,23 @@ export default function NewPostPage() {
     })
   }
 
-  const handleSaveDraft = () => {
-    // 触发编辑器的保存操作
-    document.getElementById('editor-save-trigger')?.click()
-  }
-
   return (
     <div className='container mx-auto space-y-6'>
       <div className='flex justify-between items-center'>
-        <Input
-          type='text'
-          placeholder='输入文章标题...'
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className='text-2xl font-bold border-none focus-visible:ring-0 flex-1 mr-4'
-        />
+        <h1 className='text-2xl font-bold'>新建文章</h1>
         <div className='flex items-center gap-2'>
-          <Button variant='outline' onClick={() => router.back()} disabled={isSubmitting}>
+          <Button variant='outline' onClick={() => router.back()}>
             <HiX className='w-4 h-4 mr-1' />
             取消
           </Button>
-          <Button variant='outline' onClick={handlePreview} disabled={isSubmitting}>
+          <Button variant='outline' onClick={handlePreview}>
             <HiEye className='w-4 h-4 mr-1' />
             预览
-          </Button>
-          <Button onClick={handleSaveDraft} disabled={isSubmitting}>
-            <HiSave className='w-4 h-4 mr-1' />
-            保存草稿
           </Button>
         </div>
       </div>
 
-      <BlogEditor
-        initialData={{
-          content: '',
-          title: title,
-        }}
-        onSave={handleCreatePost}
-      />
+      <BlogEditor initialData={{}} onSave={handleCreatePost} />
     </div>
   )
 }

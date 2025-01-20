@@ -3,16 +3,13 @@ import type { Post, Tag, PostStatus, PostQueryParams } from '@/types'
 
 // 创建一个新的接口，不继承 Post
 interface CreatePostData {
-  title: string
-  content?: string
-  excerpt?: string
-  slug?: string
-  status?: PostStatus
-  tags?: string[] // 标签的 slug 数组
-  author_id?: string
-  featured_image?: string
-  seo_title?: string
-  seo_description?: string
+  title: string // required, varchar
+  slug: string // required, varchar
+  content?: string // optional, text
+  excerpt?: string // optional, text
+  status?: PostStatus // optional, varchar
+  author_id?: string // optional, uuid
+  metadata?: any // optional, jsonb - 可以用来存储额外信息，如标签
 }
 
 class PostService extends BaseService {
