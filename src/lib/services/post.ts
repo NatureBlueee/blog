@@ -68,9 +68,9 @@ class PostService extends BaseService {
 
         if (tagsError) throw tagsError
 
-        if (tags.length) {
+        if (tags?.length) {
           const { error: linkError } = await this.supabase.from('post_tags').insert(
-            tags.map((tag) => ({
+            tags.map((tag: { id: string }) => ({
               post_id: newPost.id,
               tag_id: tag.id,
             }))
@@ -167,7 +167,8 @@ class PostService extends BaseService {
         posts?.map((post) => ({
           ...post,
           views: viewsCount[post.id] || 0,
-          tags: post.tags?.map((t) => t.tag) || [],
+          tags:
+            post.tags?.map((t: { tag: { id: string; name: string; slug: string } }) => t.tag) || [],
         })) || []
       )
     }, '获取文章列表')
@@ -269,6 +270,8 @@ class PostService extends BaseService {
         .select(
           `
           id,
+          title,
+          slug,
           status,
           created_at
         `
@@ -287,23 +290,23 @@ class PostService extends BaseService {
       // 3. 计算统计数据
       const stats = {
         total: posts.length,
-        published: posts.filter((post) => post.status === 'published').length,
-        draft: posts.filter((post) => post.status === 'draft').length,
+        published: posts.filter((post: { status: string }) => post.status === 'published').length,
+        draft: posts.filter((post: { status: string }) => post.status === 'draft').length,
         totalViews: viewsData?.length || 0,
         recentPosts: posts
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .sort(
+            (a: { created_at: string }, b: { created_at: string }) =>
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
           .slice(0, 5)
-          .map((post) => ({
+          .map((post: { id: string; title: string; slug: string; created_at: string }) => ({
             id: post.id,
-            status: post.status,
+            title: post.title,
+            slug: post.slug,
             created_at: post.created_at,
           })),
       }
 
-      console.log('文章统计数据:', {
-        ...stats,
-        viewsQuery: '单独查询 post_views 表',
-      })
       return stats
     }, '获取文章统计数据')
   }

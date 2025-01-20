@@ -6,28 +6,45 @@ import type { Database } from '@/types/supabase'
 type TableName = keyof Database['public']['Tables']
 type TableCounts = Record<TableName, number>
 
+// 修改状态类型定义
+interface TableStatus {
+  name: string
+  status: 'ok' | 'error'
+  count: number
+}
+
 interface DatabaseStatus {
   counts: TableCounts
   lastChecked: string
   isHealthy: boolean
   version: string
-  tables: Array<{
-    name: string
-    status: 'ok' | 'error'
-    count: number
-  }>
+  tables: TableStatus[]
 }
 
 export class DatabaseService extends BaseService {
-  // 定义常量
-  private readonly TABLES: TableName[] = [
-    'users',
+  // 更新表名常量，确保与数据库类型定义一致
+  private readonly TABLES = [
     'posts',
+    'profiles', // 替换 users
     'tags',
     'post_tags',
     'post_versions',
     'comments',
-  ]
+    'post_views',
+  ] as const
+
+  // 修改类型定义
+  private readonly TABLE_NAMES: TableName[] = this.TABLES as unknown as TableName[]
+
+  // 移除 private 修饰符，使其与基类一致
+  protected handleError(error: any, message: string): never {
+    throw new DatabaseError(message, String(500), error)
+  }
+
+  // 修改为 protected
+  protected throwError(message: string, statusCode: number, error?: any): never {
+    throw new DatabaseError(message, String(statusCode), error)
+  }
 
   // 统一获取状态方法
   async getStatus(): Promise<DatabaseStatus> {
@@ -53,12 +70,16 @@ export class DatabaseService extends BaseService {
   // 核心方法：数据库验证
   async validateSchema() {
     return this.transaction(async () => {
-      const validations = await Promise.all(this.TABLES.map((table) => this.validateTable(table)))
+      const validations = await Promise.all(
+        this.TABLE_NAMES.map((table) => this.validateTable(table))
+      )
 
       const failedTables = validations.filter((v) => !v.isValid).map((v) => v.table)
-
       if (failedTables.length > 0) {
-        throw new DatabaseError(`数据库验证失败: ${failedTables.join(', ')} 表存在问题`, 500)
+        throw new DatabaseError(
+          `数据库验证失败: ${failedTables.join(', ')} 表存在问题`,
+          String(500)
+        )
       }
 
       return true
@@ -74,13 +95,13 @@ export class DatabaseService extends BaseService {
 
       // 获取每个表的详细状态
       const tables = await Promise.all(
-        this.TABLES.map(async (table) => {
+        this.TABLE_NAMES.map(async (table) => {
           const validation = await this.validateTable(table)
           return {
             name: table,
             status: validation.isValid ? 'ok' : 'error',
             count: counts[table] || 0,
-          }
+          } as TableStatus
         })
       )
 
@@ -98,14 +119,16 @@ export class DatabaseService extends BaseService {
   private async clearAllData() {
     const { error } = await this.supabase.rpc('initialize_database')
     if (error) {
-      throw new DatabaseError('清理数据失败', 500, error)
+      this.throwError('清理数据失败', 500, error)
     }
   }
 
   // 辅助方法：验证单个表
-  private async validateTable(table: TableName) {
+  async validateTable(table: TableName) {
     const { error } = await this.supabase.from(table).select('id').limit(1)
-
+    if (error) {
+      this.throwError(`验证表 ${table} 失败`, 500, error)
+    }
     return {
       table,
       isValid: !error,
@@ -116,7 +139,7 @@ export class DatabaseService extends BaseService {
   // 辅助方法：获取所有表的计数
   private async getAllTableCounts(): Promise<TableCounts> {
     const counts = await Promise.all(
-      this.TABLES.map(async (table) => ({
+      this.TABLE_NAMES.map(async (table) => ({
         table,
         count: await this.getTableCount(table),
       }))
@@ -138,7 +161,7 @@ export class DatabaseService extends BaseService {
       .select('*', { count: 'exact', head: true })
 
     if (error) {
-      throw new DatabaseError(`获取${table}表计数失败`, 500, error)
+      this.throwError(`获取${table}表计数失败`, 500, error)
     }
 
     return count || 0
@@ -180,7 +203,7 @@ export class DatabaseService extends BaseService {
   async optimizeTables() {
     return this.transaction(async () => {
       await Promise.all(
-        this.TABLES.map((table) => this.supabase.rpc('optimize_table', { table_name: table }))
+        this.TABLE_NAMES.map((table) => this.supabase.rpc('optimize_table', { table_name: table }))
       )
     }, '优化数据库表')
   }
