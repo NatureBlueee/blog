@@ -3,13 +3,29 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { IconType } from 'react-icons'
-import { HiHome, HiDocumentText, HiPhotograph, HiUsers, HiCog } from 'react-icons/hi'
+import { HiHome, HiDocumentText, HiPhotograph, HiUsers, HiCog, HiPencilAlt } from 'react-icons/hi'
 
 const navItems = [
   { href: '/admin', label: '仪表盘', icon: HiHome },
-  { href: '/admin/posts', label: '文章', icon: HiDocumentText },
-  { href: '/admin/media', label: '媒体', icon: HiPhotograph },
-  { href: '/admin/users', label: '用户', icon: HiUsers },
+  {
+    href: '/admin/write',
+    label: '写作',
+    icon: HiPencilAlt,
+    subItems: [
+      { href: '/admin/write/new', label: '新建文章' },
+      { href: '/admin/write/drafts', label: '草稿箱' },
+    ],
+  },
+  {
+    href: '/admin/posts',
+    label: '文章管理',
+    icon: HiDocumentText,
+    subItems: [
+      { href: '/admin/posts/published', label: '已发布' },
+      { href: '/admin/posts/all', label: '全部文章' },
+    ],
+  },
+  { href: '/admin/media', label: '媒体库', icon: HiPhotograph },
   { href: '/admin/settings', label: '设置', icon: HiCog },
 ]
 

@@ -1,8 +1,18 @@
 import { BaseService } from './base'
 import type { Post, Tag, PostStatus, PostQueryParams } from '@/types'
 
-interface CreatePostData extends Partial<Post> {
+// 创建一个新的接口，不继承 Post
+interface CreatePostData {
+  title: string
+  content?: string
+  excerpt?: string
+  slug?: string
+  status?: PostStatus
   tags?: string[] // 标签的 slug 数组
+  author_id?: string
+  featured_image?: string
+  seo_title?: string
+  seo_description?: string
 }
 
 class PostService extends BaseService {
@@ -29,40 +39,73 @@ class PostService extends BaseService {
     return this.transaction(async () => {
       const { tags: tagSlugs, ...post } = postData
 
-      // 1. 创建文章
-      const { data: createdPost, error: postError } = await this.supabase
+      // 1. 生成 slug（如果没有提供）
+      if (!post.slug) {
+        post.slug = await this.generateUniqueSlug(post.title)
+      }
+
+      // 2. 创建文章
+      const { data: newPost, error: postError } = await this.supabase
         .from('posts')
         .insert({
           ...post,
+          status: post.status || 'draft',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
+          published_at: post.status === 'published' ? new Date().toISOString() : null,
         })
-        .select()
+        .select('*')
         .single()
 
       if (postError) throw postError
 
-      // 2. 如果有标签，创建关联
+      // 3. 如果有标签，创建文章-标签关联
       if (tagSlugs?.length) {
-        const { data: tags, error: tagError } = await this.supabase
+        const { data: tags, error: tagsError } = await this.supabase
           .from('tags')
-          .select('id, slug')
+          .select('id')
           .in('slug', tagSlugs)
 
-        if (tagError) throw tagError
+        if (tagsError) throw tagsError
 
-        const tagRelations = tags.map((tag) => ({
-          post_id: createdPost.id,
-          tag_id: tag.id,
-        }))
+        if (tags.length) {
+          const { error: linkError } = await this.supabase.from('post_tags').insert(
+            tags.map((tag) => ({
+              post_id: newPost.id,
+              tag_id: tag.id,
+            }))
+          )
 
-        const { error: relationError } = await this.supabase.from('post_tags').insert(tagRelations)
-
-        if (relationError) throw relationError
+          if (linkError) throw linkError
+        }
       }
 
-      return createdPost
+      return newPost
     }, '创建文章')
+  }
+
+  private async generateUniqueSlug(title: string) {
+    const baseSlug = title
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\u4e00-\u9fa5]+/g, '-') // 支持中文和英文
+      .replace(/^-+|-+$/g, '')
+
+    let slug = baseSlug
+    let counter = 1
+
+    while (true) {
+      const { data, error } = await this.supabase
+        .from('posts')
+        .select('id')
+        .eq('slug', slug)
+        .single()
+
+      if (error || !data) break
+      slug = `${baseSlug}-${counter++}`
+    }
+
+    return slug
   }
 
   async createMany(posts: CreatePostData[]) {

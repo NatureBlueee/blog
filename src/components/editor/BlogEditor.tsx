@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
@@ -43,23 +43,10 @@ export function BlogEditor({ initialData = {}, onSave }: BlogEditorProps) {
     try {
       setIsSaving(true)
       setError(undefined)
-
-      const savedPost = await onSave({
-        ...metadata,
-        content,
-        slug: initialData.slug,
-      })
-
-      toast({
-        title: '成功',
-        description: '文章已保存',
-      })
-
-      return savedPost
+      await onSave(content, metadata)
     } catch (error) {
       console.error('保存失败:', error)
       setError(error instanceof Error ? error.message : '保存失败')
-      throw error
     } finally {
       setIsSaving(false)
     }
@@ -100,11 +87,12 @@ export function BlogEditor({ initialData = {}, onSave }: BlogEditorProps) {
         </Alert>
       )}
 
-      <div className='flex justify-end'>
-        <Button onClick={handleSave} disabled={isSaving}>
-          {isSaving ? '保存中...' : '保存'}
-        </Button>
-      </div>
+      <button
+        id='editor-save-trigger'
+        onClick={handleSave}
+        style={{ display: 'none' }}
+        aria-hidden='true'
+      />
     </div>
   )
 }
